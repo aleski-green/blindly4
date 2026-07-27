@@ -87,3 +87,32 @@ blindy> exit
 4. For text fields, use `blindy focus --path PATH`, then `blindy set-value --path PATH --value 'text'`. For tabs and buttons, use `blindy press --path PATH`.
 
 `press`, `focus`, and `set-value` can change the target application's UI. All other commands are read-only. Use `blindy --help` for the complete command reference.
+
+## Project layout
+
+```text
+Sources/axvo/
+  main.swift              entry point: run the registry, map errors to exit codes
+  CLI/                    Command type, registry, generated help
+  CLI/Commands/           one file per group of commands
+  Accessibility/          AX element reading, tree walking, path resolution
+  Input/                  synthetic mouse/keyboard events, NSWorkspace actions
+  Shell/                  interactive prompt, line editor, tokenizer
+  Support/                JSON output, errors, argument parsing
+```
+
+## Adding a command
+
+Declare it in the matching group in `CLI/Commands/`:
+
+```swift
+Command("windows", "[--pid PID]") { invocation in
+    let app = try invocation.application()
+    printJSON(["windows": children(of: app).map { summary(of: $0) }])
+}
+```
+
+The registry supplies the accessibility check and argument parsing, and the help text
+and shell tab completion are derived from the declared name and arguments, so no other
+file needs to change. Pass `requiresAccessibility: false` for commands that do not read
+the accessibility tree.
