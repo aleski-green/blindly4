@@ -7,13 +7,13 @@ struct Command: Sendable {
     let name: String
     let arguments: String
     let requiresAccessibility: Bool
-    let handler: @Sendable (Invocation) throws -> Void
+    let handler: @Sendable (Invocation, ExecutionContext) throws -> Void
 
     init(
         _ name: String,
         _ arguments: String = "",
         requiresAccessibility: Bool = true,
-        handler: @escaping @Sendable (Invocation) throws -> Void
+        handler: @escaping @Sendable (Invocation, ExecutionContext) throws -> Void
     ) {
         self.name = name
         self.arguments = arguments

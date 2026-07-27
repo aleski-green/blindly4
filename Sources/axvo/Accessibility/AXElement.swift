@@ -1,12 +1,41 @@
 import ApplicationServices
 import Foundation
 
-func copyAttribute(_ element: AXUIElement, _ name: String) -> Any? {
+func copyAttribute(_ element: AXUIElement, _ name: String, profile: Profile? = nil) -> Any? {
+    profile?.attributeReads += 1
     var value: CFTypeRef?
     return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
 }
 
-func copyElementAttribute(_ element: AXUIElement, _ name: String) -> AXUIElement? {
+/// Reads only the attributes the caller needs. Batching reduces cross-process AX IPC
+/// on complex interfaces; a failed batch falls back to the established single-read path.
+func copyAttributes(_ element: AXUIElement, _ names: [String], profile: Profile? = nil) -> [String: Any] {
+    guard names.count > 1 else {
+        guard let name = names.first, let value = copyAttribute(element, name, profile: profile) else { return [:] }
+        return [name: value]
+    }
+    profile?.batchReads += 1
+    profile?.attributeReads += 1
+    var values: CFArray?
+    let result = AXUIElementCopyMultipleAttributeValues(element, names as CFArray, [], &values)
+    guard result == .success, let array = values as? [Any], array.count == names.count else {
+        return Dictionary(uniqueKeysWithValues: names.compactMap { name in
+            copyAttribute(element, name, profile: profile).map { (name, $0) }
+        })
+    }
+    return Dictionary(uniqueKeysWithValues: zip(names, array).compactMap { name, value in
+        // AX returns AXValue-wrapped AXError values for unavailable members. AXValue
+        // also carries positions and sizes, so distinguish the error subtype first.
+        let cfValue = value as CFTypeRef
+        guard CFGetTypeID(cfValue) == AXValueGetTypeID() else { return (name, value) }
+        let axValue = unsafeDowncast(cfValue, to: AXValue.self)
+        var axError = AXError.success
+        return AXValueGetValue(axValue, .axError, &axError) ? nil : (name, value)
+    })
+}
+
+func copyElementAttribute(_ element: AXUIElement, _ name: String, profile: Profile? = nil) -> AXUIElement? {
+    profile?.attributeReads += 1
     var value: CFTypeRef?
     guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success,
           let value,
@@ -14,14 +43,16 @@ func copyElementAttribute(_ element: AXUIElement, _ name: String) -> AXUIElement
     return unsafeDowncast(value, to: AXUIElement.self)
 }
 
-func attributes(of element: AXUIElement) -> [String] {
+func attributes(of element: AXUIElement, profile: Profile? = nil) -> [String] {
+    profile?.attributeReads += 1
     var names: CFArray?
     guard AXUIElementCopyAttributeNames(element, &names) == .success,
           let array = names as? [String] else { return [] }
     return array
 }
 
-func actions(of element: AXUIElement) -> [String] {
+func actions(of element: AXUIElement, profile: Profile? = nil) -> [String] {
+    profile?.attributeReads += 1
     var names: CFArray?
     guard AXUIElementCopyActionNames(element, &names) == .success,
           let array = names as? [String] else { return [] }
@@ -47,58 +78,58 @@ func textValue(_ value: Any) -> Any {
     return String(describing: value)
 }
 
-func textAttribute(_ element: AXUIElement, _ name: String) -> String {
-    guard let value = copyAttribute(element, name) else { return "" }
+func textAttribute(_ element: AXUIElement, _ name: String, profile: Profile? = nil) -> String {
+    guard let value = copyAttribute(element, name, profile: profile) else { return "" }
     return String(describing: textValue(value))
 }
 
 private let summaryAttributes = [
     "AXRole", "AXSubrole", "AXTitle", "AXDescription", "AXValue",
-    "AXIdentifier", "AXEnabled", "AXFocused", "AXPosition", "AXSize"
+    "AXIdentifier", "AXEnabled", "AXFocused", "AXSelected", "AXPosition", "AXSize"
 ]
 
-func summary(of element: AXUIElement, includeAttributes: Bool = false) -> JSON {
+func summary(of element: AXUIElement, includeAttributes: Bool = false, profile: Profile? = nil) -> JSON {
     var pid: pid_t = 0
     AXUIElementGetPid(element, &pid)
     var result: JSON = ["pid": Int(pid)]
-    for name in summaryAttributes {
-        if let value = copyAttribute(element, name) {
+    for (name, value) in copyAttributes(element, summaryAttributes, profile: profile) {
             result[String(name.dropFirst(2)).lowercased()] = textValue(value)
-        }
     }
-    if includeAttributes { result["attributes"] = attributes(of: element).sorted() }
+    if includeAttributes { result["attributes"] = attributes(of: element, profile: profile).sorted() }
     return result
 }
 
 /// A summary plus the fields commands report when a single element is the subject.
-func detail(of element: AXUIElement, path: String? = nil) -> JSON {
-    var result = summary(of: element, includeAttributes: true)
-    result["actions"] = actions(of: element).sorted()
+func detail(of element: AXUIElement, path: String? = nil, profile: Profile? = nil) -> JSON {
+    var result = summary(of: element, includeAttributes: true, profile: profile)
+    result["actions"] = actions(of: element, profile: profile).sorted()
     if let path { result["path"] = path }
     return result
 }
 
-func children(of element: AXUIElement) -> [AXUIElement] {
-    let standardChildren = (copyAttribute(element, "AXChildren") as? [AXUIElement]) ?? []
+func children(of element: AXUIElement, includeApplicationWindows: Bool = false, profile: Profile? = nil) -> [AXUIElement] {
+    let standardChildren = (copyAttribute(element, "AXChildren", profile: profile) as? [AXUIElement]) ?? []
+    guard includeApplicationWindows else { return standardChildren }
     // Electron and some native apps expose their content windows through AXWindows
     // rather than AXChildren on the application element. Treat those windows as
     // navigable children unless a window is already present in AXChildren.
-    let alreadyContainsWindow = standardChildren.contains { textAttribute($0, "AXRole") == "AXWindow" }
-    guard textAttribute(element, "AXRole") == "AXApplication", !alreadyContainsWindow,
-          let windows = copyAttribute(element, "AXWindows") as? [AXUIElement] else {
+    let alreadyContainsWindow = standardChildren.contains { textAttribute($0, "AXRole", profile: profile) == "AXWindow" }
+    guard !alreadyContainsWindow,
+          let windows = copyAttribute(element, "AXWindows", profile: profile) as? [AXUIElement] else {
         return standardChildren
     }
     return standardChildren + windows
 }
 
-func tree(of element: AXUIElement, depth: Int, remaining: inout Int) -> JSON {
+func tree(of element: AXUIElement, depth: Int, remaining: inout Int, includeApplicationWindows: Bool = true, profile: Profile? = nil) -> JSON {
     remaining -= 1
-    var node = summary(of: element)
+    profile?.visitedNodes += 1
+    var node = summary(of: element, profile: profile)
     guard depth > 0, remaining > 0 else { return node }
     var listedChildren: [JSON] = []
-    for child in children(of: element) {
+    for child in children(of: element, includeApplicationWindows: includeApplicationWindows, profile: profile) {
         guard remaining > 0 else { break }
-        listedChildren.append(tree(of: child, depth: depth - 1, remaining: &remaining))
+        listedChildren.append(tree(of: child, depth: depth - 1, remaining: &remaining, includeApplicationWindows: false, profile: profile))
     }
     if !listedChildren.isEmpty { node["children"] = listedChildren }
     return node
@@ -110,35 +141,62 @@ struct Match {
 }
 
 /// Depth-first list of every element below `root`, labelled with its AXChildren path.
-func descendants(of root: AXUIElement, depth: Int) -> [Match] {
+func descendants(of root: AXUIElement, depth: Int, profile: Profile? = nil) -> [Match] {
     var matches: [Match] = []
-    func visit(_ element: AXUIElement, path: String, depth: Int) {
+    func visit(_ element: AXUIElement, path: String, depth: Int, includeApplicationWindows: Bool) {
+        profile?.visitedNodes += 1
         matches.append(Match(path: path, element: element))
         guard depth > 0 else { return }
-        for (index, child) in children(of: element).enumerated() {
-            visit(child, path: path.isEmpty ? String(index) : "\(path).\(index)", depth: depth - 1)
+        for (index, child) in children(of: element, includeApplicationWindows: includeApplicationWindows, profile: profile).enumerated() {
+            visit(child, path: path.isEmpty ? String(index) : "\(path).\(index)", depth: depth - 1, includeApplicationWindows: false)
         }
     }
-    visit(root, path: "", depth: depth)
+    visit(root, path: "", depth: depth, includeApplicationWindows: true)
     return matches
 }
 
-func outlineLine(path: String, element: AXUIElement) -> String {
-    let role = textAttribute(element, "AXRole")
-    let labels = ["AXTitle", "AXValue", "AXDescription"].map { textAttribute(element, $0) }
+/// Depth-first search that returns as soon as it has enough matches.
+func findDescendants(
+    of root: AXUIElement,
+    depth: Int,
+    limit: Int,
+    profile: Profile? = nil,
+    where predicate: (AXUIElement) -> Bool
+) -> [Match] {
+    depthFirstMatches(
+        root: root,
+        depth: depth,
+        limit: limit,
+        children: { element, isRoot in
+            children(of: element, includeApplicationWindows: isRoot, profile: profile)
+        },
+        matches: predicate,
+        onVisit: { profile?.visitedNodes += 1 }
+    ).map { Match(path: $0.path, element: $0.node) }
+}
+
+func outlineLine(path: String, element: AXUIElement, profile: Profile? = nil) -> String {
+    let values = copyAttributes(element, ["AXRole", "AXTitle", "AXValue", "AXDescription"], profile: profile)
+    let role = values["AXRole"].map { String(describing: textValue($0)) } ?? ""
+    let labels = ["AXTitle", "AXValue", "AXDescription"].map { values[$0].map { String(describing: textValue($0)) } ?? "" }
     let label = labels.first { !$0.isEmpty } ?? ""
     return "\(path.isEmpty ? "root" : path)  \(role)\(label.isEmpty ? "" : "  \(label)")"
 }
 
-func matches(_ element: AXUIElement, title: String?, role: String?, value: String?) -> Bool {
+func matches(_ element: AXUIElement, title: String?, role: String?, value: String?, description: String? = nil, profile: Profile? = nil) -> Bool {
+    let requested = [("AXTitle", title), ("AXValue", value), ("AXDescription", description)]
+        .compactMap { attribute, query in query.map { (attribute, $0) } }
+        + (role.map { [("AXRole", $0)] } ?? [])
+    let values = copyAttributes(element, requested.map(\.0), profile: profile)
     func contains(_ attribute: String, _ query: String?) -> Bool {
         guard let query, !query.isEmpty else { return true }
-        return textAttribute(element, attribute).localizedCaseInsensitiveContains(query)
+        return (values[attribute].map { String(describing: textValue($0)) } ?? "").localizedCaseInsensitiveContains(query)
     }
     let expectedRole = role.map { $0.hasPrefix("AX") ? $0 : "AX\($0)" }
     return contains("AXTitle", title)
         && contains("AXValue", value)
-        && (expectedRole == nil || textAttribute(element, "AXRole") == expectedRole)
+        && contains("AXDescription", description)
+        && (expectedRole == nil || (values["AXRole"].map { String(describing: textValue($0)) } ?? "") == expectedRole)
 }
 
 /// Writes an AX attribute, translating the AXError into a readable failure.

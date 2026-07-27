@@ -23,6 +23,27 @@ func activateApplication(pidText: String) throws {
     }
 }
 
+/// Synthetic keyboard and mouse events are system-wide. When a caller supplies a
+/// target PID, refuse to inject anything until macOS confirms that exact app owns the
+/// foreground. Omitting `--pid` retains the legacy "current frontmost app" behavior.
+func requireInputTarget(pidText: String?) throws -> Int? {
+    guard let pidText else { return nil }
+    guard let pid = pid_t(pidText), NSRunningApplication(processIdentifier: pid) != nil else {
+        throw CLIError.usage("--pid must identify a running application")
+    }
+    if NSWorkspace.shared.frontmostApplication?.processIdentifier != pid {
+        try activateApplication(pidText: pidText)
+        for _ in 0..<20 {
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { return Int(pid) }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+    }
+    guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
+        throw CLIError.accessibility("Process \(pid) did not become frontmost; refusing to inject input into another application")
+    }
+    return Int(pid)
+}
+
 private let openableSchemes = ["http", "https", "slack"]
 
 func openURL(_ text: String) throws {

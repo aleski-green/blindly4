@@ -1,26 +1,38 @@
 let inputCommands = CommandGroup(title: "Desktop input", commands: [
-    Command("click", "--x X --y Y") { invocation in
+    Command("click", "--x X --y Y [--pid PID]") { invocation, context in
         let x = try invocation.number("x")
         let y = try invocation.number("y")
+        let pid = try requireInputTarget(pidText: invocation.optional("pid"))
         try postMouseClick(x: x, y: y)
-        printJSON(["x": x, "y": y, "ok": true])
+        var result: JSON = ["x": x, "y": y, "ok": true]
+        if let pid { result["pid"] = pid }
+        printJSON(result, to: context)
     },
 
-    Command("type", "--text TEXT") { invocation in
+    Command("type", "--text TEXT [--pid PID]") { invocation, context in
         let text = try invocation.value("text")
+        let pid = try requireInputTarget(pidText: invocation.optional("pid"))
         try postText(text)
-        printJSON(["characters": text.count, "ok": true])
+        var result: JSON = ["characters": text.count, "ok": true]
+        if let pid { result["pid"] = pid }
+        printJSON(result, to: context)
     },
 
-    Command("paste", "--text TEXT") { invocation in
+    Command("paste", "--text TEXT [--pid PID]") { invocation, context in
         let text = try invocation.value("text")
-        try pasteText(text)
-        printJSON(["characters": text.count, "ok": true])
+        let pid = try requireInputTarget(pidText: invocation.optional("pid"))
+        try pasteText(text, profile: context.profile)
+        var result: JSON = ["characters": text.count, "ok": true]
+        if let pid { result["pid"] = pid }
+        printJSON(result, to: context)
     },
 
-    Command("key", "--key return|tab|escape|space|delete|up|down|left|right|command+k") { invocation in
+    Command("key", "--key return|tab|escape|space|delete|up|down|left|right|command+k [--pid PID]") { invocation, context in
         let key = try invocation.value("key")
+        let pid = try requireInputTarget(pidText: invocation.optional("pid"))
         try postKey(key)
-        printJSON(["key": key, "ok": true])
+        var result: JSON = ["key": key, "ok": true]
+        if let pid { result["pid"] = pid }
+        printJSON(result, to: context)
     }
 ])

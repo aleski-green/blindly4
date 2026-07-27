@@ -5,16 +5,23 @@ import Foundation
 struct Invocation {
     let command: String
     let options: [String: String]
+    let flags: Set<String>
     let positionals: [String]
 
     init(command: String, arguments: [String]) throws {
         var options: [String: String] = [:]
+        var flags: Set<String> = []
         var positionals: [String] = []
         var index = 0
         while index < arguments.count {
             let token = arguments[index]
             guard token.hasPrefix("--") else {
                 positionals.append(token)
+                index += 1
+                continue
+            }
+            if token == "--require-selected" {
+                flags.insert("require-selected")
                 index += 1
                 continue
             }
@@ -26,12 +33,15 @@ struct Invocation {
         }
         self.command = command
         self.options = options
+        self.flags = flags
         self.positionals = positionals
     }
 
     func optional(_ name: String) -> String? {
         options[name]
     }
+
+    func hasFlag(_ name: String) -> Bool { flags.contains(name) }
 
     func value(_ name: String) throws -> String {
         guard let value = options[name] else {
@@ -60,8 +70,8 @@ struct Invocation {
     }
 
     /// The element addressed by `--path` within the target application.
-    func element() throws -> (path: String, element: AXUIElement) {
+    func element(profile: Profile? = nil) throws -> (path: String, element: AXUIElement) {
         let path = try value("path")
-        return (path, try elementAtPath(path, from: try application()))
+        return (path, try elementAtPath(path, from: try application(), profile: profile))
     }
 }

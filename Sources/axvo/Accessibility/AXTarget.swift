@@ -13,12 +13,12 @@ func targetApplication(pidText: String?) throws -> AXUIElement {
 }
 
 /// Resolves a dotted AXChildren path such as `0.2.1` below `root`.
-func elementAtPath(_ path: String, from root: AXUIElement) throws -> AXUIElement {
+func elementAtPath(_ path: String, from root: AXUIElement, profile: Profile? = nil) throws -> AXUIElement {
     guard !path.isEmpty else { return root }
     var element = root
-    for part in path.split(separator: ".") {
+    for (pathIndex, part) in path.split(separator: ".").enumerated() {
         guard let index = Int(part), index >= 0 else { throw CLIError.usage("Invalid path: \(path)") }
-        let available = children(of: element)
+        let available = children(of: element, includeApplicationWindows: pathIndex == 0, profile: profile)
         guard index < available.count else {
             throw CLIError.accessibility("Path \(path) does not exist (index \(index) is out of range)")
         }
