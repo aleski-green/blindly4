@@ -89,6 +89,21 @@ blindy> press --pid 1317 --path 0.2.1
 blindy> exit
 ```
 
+## Watching for UI changes
+
+Use a memory-only snapshot to report new accessible elements in any region. This is
+universal: it does not assume an app's message labels or wording.
+
+```sh
+# Before an operation, record the chat/message region.
+blindy snapshot --pid 12345 --name before --path 0.2.1.0 --depth 7
+
+# After waiting, return only AX elements that were not present in that region.
+blindy changes --pid 12345 --since before --path 0.2.1.0 --depth 7
+```
+
+Snapshots live only in the local service process and disappear when it exits.
+
 ## Navigation workflow
 
 1. Put the application you want to inspect in front.

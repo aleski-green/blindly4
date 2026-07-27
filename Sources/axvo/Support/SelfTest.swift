@@ -46,6 +46,9 @@ enum SelfTest {
         guard !containsExactVisibleText(["old hello", "hello again"], "hello") else {
             return "visible draft text accepted a partial AX attribute"
         }
+        guard signaturesAdded(current: ["old", "reply"], since: ["old"]) == ["reply"] else {
+            return "AX snapshot comparison did not isolate newly visible elements"
+        }
         return nil
     }
 }
