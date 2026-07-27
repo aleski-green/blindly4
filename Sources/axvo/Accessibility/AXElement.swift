@@ -83,6 +83,23 @@ func textAttribute(_ element: AXUIElement, _ name: String, profile: Profile? = n
     return String(describing: textValue(value))
 }
 
+/// AX text frequently includes invisible directionality markers.  They do not alter
+/// what the person sees, so ignore only those markers while otherwise requiring an
+/// exact draft match.  In particular, this deliberately rejects prefixes, suffixes,
+/// and old text left in a composer.
+func sameVisibleText(_ actual: String, _ expected: String) -> Bool {
+    let invisibleDirectionality = CharacterSet(charactersIn: "\u{200E}\u{200F}\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}")
+    func normalized(_ text: String) -> String {
+        text
+            .precomposedStringWithCanonicalMapping
+            .unicodeScalars
+            .filter { !invisibleDirectionality.contains($0) }
+            .map(String.init)
+            .joined()
+    }
+    return normalized(actual) == normalized(expected)
+}
+
 private let summaryAttributes = [
     "AXRole", "AXSubrole", "AXTitle", "AXDescription", "AXValue",
     "AXIdentifier", "AXEnabled", "AXFocused", "AXSelected", "AXPosition", "AXSize"

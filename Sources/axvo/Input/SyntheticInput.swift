@@ -74,7 +74,9 @@ func postKey(_ keyName: String) throws {
     up.post(tap: .cghidEventTap)
 }
 
-func pasteText(_ text: String, profile: Profile? = nil) throws {
+/// Returns whether an optional observer confirmed that the pasted text reached its
+/// intended control before the clipboard was restored.
+func pasteText(_ text: String, profile: Profile? = nil, until observed: (() -> Bool)? = nil) throws -> Bool {
     let pasteboard = NSPasteboard.general
     let previousText = pasteboard.string(forType: .string)
     pasteboard.clearContents()
@@ -82,12 +84,18 @@ func pasteText(_ text: String, profile: Profile? = nil) throws {
         throw CLIError.accessibility("Could not place text on the macOS pasteboard")
     }
     try postKey("command+v")
-    // The event is normally consumed on the next run-loop turn. Keep the clipboard
-    // available for a bounded, short interval instead of unconditionally blocking
-    // every paste for one second.
+    // The event is normally consumed on the next run-loop turn.  A normal paste keeps
+    // the old short bounded wait; a verified paste retains the clipboard long enough
+    // to observe the target's AX value, but never indefinitely.
     let waitStarted = ContinuousClock.now
-    for _ in 0..<12 {
+    let attempts = observed == nil ? 12 : 40
+    var didObserve = observed == nil
+    for _ in 0..<attempts {
         RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        if observed?() == true {
+            didObserve = true
+            break
+        }
     }
     let wait = waitStarted.duration(to: .now)
     profile?.pasteWaitMilliseconds += Int(Double(wait.components.seconds) * 1_000 + Double(wait.components.attoseconds) / 1e15)
@@ -95,4 +103,5 @@ func pasteText(_ text: String, profile: Profile? = nil) throws {
         pasteboard.clearContents()
         pasteboard.setString(previousText, forType: .string)
     }
+    return didObserve
 }

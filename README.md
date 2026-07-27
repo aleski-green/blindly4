@@ -63,6 +63,16 @@ blindy key --key return
 
 If a web-based composer filters direct Unicode input, use `blindy paste --text 'Hello from Blindly'`. It pastes via Command-V and restores the previous text clipboard after the target app receives the paste.
 
+For a message that will be sent externally, use the verified form. It writes only through the process-targeted AX API, requires the intended PID, and refuses success unless that element exposes exactly the requested draft text. It never falls back to a global keyboard event, which could be delivered to another application. Bind Send to the same exact draft immediately before the action:
+
+```sh
+blindy paste --pid 14476 --target-path 0.2.4 --text 'Hello from Blindly'
+blindy press --pid 14476 --path 0.2.5 --expect-description Send \
+  --require-value-path 0.2.4 --require-value 'Hello from Blindly'
+```
+
+If the composer does not expose its current text through `AXValue`, Blindly fails closed: inspect the UI instead of sending. This prevents a pre-existing draft or a paste delivered to another control from being sent accidentally.
+
 ## Interactive shell
 
 Use this when you want to explore without repeatedly typing the executable path:
@@ -128,5 +138,6 @@ command with `--no-service` to bypass the service for diagnostics.
 
 For system-wide input commands (`click`, `type`, `paste`, and `key`), pass `--pid` to
 make Blindly activate and verify the intended foreground application before it emits the
-event. This prevents text intended for one app from being injected into another app's
-composer.
+event. For external messages, also pass `paste --target-path` and use `press` with
+`--require-value-path` / `--require-value`; a PID guard alone cannot prove that a global
+keyboard event reached the intended composer.

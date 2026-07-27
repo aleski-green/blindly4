@@ -34,11 +34,23 @@ let elementCommands = CommandGroup(title: "Elements", commands: [
         printJSON(["path": target.path, "attribute": kAXFocusedAttribute, "ok": true], to: context)
     },
 
-    Command("press", "\(pathArguments) [--expect-description TEXT] [--require-selected]") { invocation, context in
+    Command("press", "\(pathArguments) [--expect-description TEXT] [--require-selected] [--require-value-path PATH --require-value TEXT]") { invocation, context in
         let target = try invocation.element(profile: context.profile)
         if let expected = invocation.optional("expect-description"),
            !textAttribute(target.element, "AXDescription", profile: context.profile).localizedCaseInsensitiveContains(expected) {
             throw CLIError.usage("press target does not match --expect-description \(expected)")
+        }
+        let requiredValuePath = invocation.optional("require-value-path")
+        let requiredValue = invocation.optional("require-value")
+        guard (requiredValuePath == nil) == (requiredValue == nil) else {
+            throw CLIError.usage("press requires both --require-value-path and --require-value")
+        }
+        if let requiredValuePath, let requiredValue {
+            let draft = try elementAtPath(requiredValuePath, from: try invocation.application(), profile: context.profile)
+            let actual = textAttribute(draft, kAXValueAttribute, profile: context.profile)
+            guard sameVisibleText(actual, requiredValue) else {
+                throw CLIError.accessibility("Press blocked: the required draft does not exactly match --require-value")
+            }
         }
         try performAction(target.element, kAXPressAction)
         var selected = false
