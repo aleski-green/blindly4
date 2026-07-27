@@ -35,22 +35,21 @@ let inputCommands = CommandGroup(title: "Desktop input", commands: [
                 let foundRole = role.isEmpty ? "an unnamed element" : role
                 throw CLIError.usage("Paste blocked: --target-path must resolve to a writable AX text control, not \(foundRole)")
             }
-            // Prefer process-targeted AX value writing. Some web views do not support
-            // it, in which case emulate the assistive-technology focus/paste flow and
-            // require a proof that this exact composer now contains the full draft.
-            if (try? setAttribute(target, "AXValue", text as CFTypeRef)) != nil,
-               hasExactVisibleText(in: target, expected: text, profile: context.profile) {
-                verified = true
+            // Clear the AX-visible draft before input. A successful AXValue write is
+            // not enough to submit text in every web view, so always use the focused
+            // paste path for the actual edit and retain the clipboard until the exact
+            // new draft is observed.
+            try setAttribute(target, "AXValue", "" as CFTypeRef)
+            guard sameVisibleText(textAttribute(target, "AXValue", profile: context.profile), "") else {
+                throw CLIError.accessibility("Paste blocked: the existing draft could not be cleared through AXValue")
             }
-            if !verified {
-                guard let point = center(of: target, profile: context.profile) else {
-                    throw CLIError.accessibility("Paste blocked: --target-path has no usable on-screen bounds")
-                }
-                try postMouseClick(x: point.x, y: point.y)
-                _ = try requireInputTarget(pidText: invocation.optional("pid"))
-                verified = try pasteText(text, profile: context.profile) {
-                    hasExactVisibleText(in: target, expected: text, profile: context.profile)
-                }
+            guard let point = center(of: target, profile: context.profile) else {
+                throw CLIError.accessibility("Paste blocked: --target-path has no usable on-screen bounds")
+            }
+            try postMouseClick(x: point.x, y: point.y)
+            _ = try requireInputTarget(pidText: invocation.optional("pid"))
+            verified = try pasteText(text, profile: context.profile) {
+                hasExactVisibleText(in: target, expected: text, profile: context.profile)
             }
             guard verified else {
                 throw CLIError.accessibility("Paste blocked: the composer did not expose exactly the requested text; do not press Send")

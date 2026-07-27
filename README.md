@@ -63,7 +63,7 @@ blindy key --key return
 
 If a web-based composer filters direct Unicode input, use `blindy paste --text 'Hello from Blindly'`. It pastes via Command-V and restores the previous text clipboard after the target app receives the paste.
 
-For a message that will be sent externally, use the verified form. It requires the intended PID and refuses success unless the composer's own AX subtree exposes exactly the requested draft text. It first tries process-targeted AX value writing; if that is unsupported, it focuses the live AX composer and uses the same paste route a keyboard user would. Bind Send to the same exact draft immediately before the action:
+For a message that will be sent externally, use the verified form. It requires the intended PID, clears the current AX draft, and refuses success unless the composer's own AX subtree exposes exactly the requested text. It focuses the live AX composer and retains the clipboard until the paste is observed (up to one second), so a delayed web view cannot paste a restored clipboard value. Bind Send to the same exact draft immediately before the action:
 
 ```sh
 blindy paste --pid 14476 --target-path 0.2.4 --text 'Hello from Blindly'

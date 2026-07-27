@@ -88,7 +88,7 @@ func pasteText(_ text: String, profile: Profile? = nil, until observed: (() -> B
     // the old short bounded wait; a verified paste retains the clipboard long enough
     // to observe the target's AX value, but never indefinitely.
     let waitStarted = ContinuousClock.now
-    let attempts = observed == nil ? 12 : 40
+    let attempts = observed == nil ? 12 : 100
     var didObserve = observed == nil
     for _ in 0..<attempts {
         RunLoop.current.run(until: Date().addingTimeInterval(0.01))
