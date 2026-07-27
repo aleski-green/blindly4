@@ -12,7 +12,11 @@ func usage() -> String {
     Use `show` to see readable paths, `find` to locate an element by name, and `press`
     to activate a button or tab. `activate`, `click`, `type`, and `key` directly
     control the desktop UI, including app composers that expose no writable AX field.
+    Pass `--pid` to click, type, paste, or key to verify that exact app is frontmost
+    before Blindly injects a system-wide input event.
 
     Run `blindy shell` for an interactive prompt. Type `help` or `exit` there.
+    Add `--profile` to any non-shell command for timing, AX-read, and cache counters.
+    Add `--no-service` before a command to bypass the local service for diagnostics.
     """
 }

@@ -116,3 +116,17 @@ The registry supplies the accessibility check and argument parsing, and the help
 and shell tab completion are derived from the declared name and arguments, so no other
 file needs to change. Pass `requiresAccessibility: false` for commands that do not read
 the accessibility tree.
+
+## Performance
+
+One-shot commands automatically share a per-user local service while it is active. The
+service keeps only in-memory, validated `find --limit 1` path hints; it never writes UI
+metadata or search text to disk, and falls back to a normal accessibility-tree search if
+the app, window, or target has changed. Add `--profile` to a command to inspect elapsed
+time, accessibility reads, visited nodes, cache hits, and paste wait time. Prefix a
+command with `--no-service` to bypass the service for diagnostics.
+
+For system-wide input commands (`click`, `type`, `paste`, and `key`), pass `--pid` to
+make Blindly activate and verify the intended foreground application before it emits the
+event. This prevents text intended for one app from being injected into another app's
+composer.

@@ -9,6 +9,7 @@ func runInteractiveShell() {
         options: CommandRegistry.optionFlags
     )
     print("blindy interactive shell — type `help` for commands, `exit` to close.")
+    let session = AccessibilitySession()
 
     while let line = editor.readLine(prompt: "blindy> ") {
         let tokens = shellTokens(line)
@@ -21,9 +22,9 @@ func runInteractiveShell() {
         case "shell":
             print("Already in the blindy shell.")
         default:
-            // Commands run in this process, so the shell keeps one accessibility
-            // grant and reports failures without exiting.
-            do { try CommandRegistry.run(tokens) } catch { report(error, showUsage: false) }
+            // Commands run in this process, retaining the same in-memory AX cache.
+            let response = CommandRegistry.execute(tokens, session: session)
+            emit(response)
         }
     }
 }

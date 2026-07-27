@@ -2,12 +2,42 @@ import Foundation
 
 typealias JSON = [String: Any]
 
-func printJSON(_ value: Any) {
+struct ExecutionResponse: Codable {
+    let stdout: String
+    let stderr: String
+    let status: Int32
+}
+
+final class ExecutionContext {
+    let session: AccessibilitySession
+    let profile: Profile
+    private(set) var stdout = ""
+    private(set) var stderr = ""
+
+    init(session: AccessibilitySession = AccessibilitySession(), profileEnabled: Bool = false) {
+        self.session = session
+        self.profile = Profile(enabled: profileEnabled)
+    }
+
+    func writeStdout(_ text: String) { stdout += text }
+    func writeStderr(_ text: String) { stderr += text }
+
+    func response(status: Int32) -> ExecutionResponse {
+        ExecutionResponse(stdout: stdout, stderr: stderr, status: status)
+    }
+}
+
+func printJSON(_ value: Any, to context: ExecutionContext) {
     guard JSONSerialization.isValidJSONObject(value),
           let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys]),
           let text = String(data: data, encoding: .utf8) else {
-        fputs("{\"error\":\"could not encode JSON\"}\n", stderr)
+        context.writeStderr("{\"error\":\"could not encode JSON\"}\n")
         return
     }
-    print(text)
+    context.writeStdout(text + "\n")
+}
+
+func emit(_ response: ExecutionResponse) {
+    FileHandle.standardOutput.write(Data(response.stdout.utf8))
+    FileHandle.standardError.write(Data(response.stderr.utf8))
 }

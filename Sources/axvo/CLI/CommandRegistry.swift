@@ -21,9 +21,9 @@ enum CommandRegistry {
     }
 
     /// Parses and runs one argument list, such as `["press", "--path", "0.2"]`.
-    static func run(_ arguments: [String]) throws {
+    static func run(_ arguments: [String], context: ExecutionContext) throws {
         guard let name = arguments.first, !isHelpFlag(name) else {
-            print(usage())
+            context.writeStdout(usage() + "\n")
             return
         }
         guard let command = command(named: name) else {
@@ -31,7 +31,23 @@ enum CommandRegistry {
         }
         let invocation = try Invocation(command: name, arguments: Array(arguments.dropFirst()))
         if command.requiresAccessibility { try requireAccessibility() }
-        try command.handler(invocation)
+        try command.handler(invocation, context)
+    }
+
+    /// Executes a command without allowing an error to escape the process boundary.
+    static func execute(_ rawArguments: [String], session: AccessibilitySession = AccessibilitySession()) -> ExecutionResponse {
+        let profileEnabled = rawArguments.contains("--profile")
+        let arguments = rawArguments.filter { $0 != "--profile" }
+        let context = ExecutionContext(session: session, profileEnabled: profileEnabled)
+        let status: Int32
+        do {
+            try run(arguments, context: context)
+            status = 0
+        } catch {
+            status = report(error, showUsage: true, to: context)
+        }
+        if profileEnabled { context.writeStderr(context.profile.render()) }
+        return context.response(status: status)
     }
 
     private static func isHelpFlag(_ token: String) -> Bool {
