@@ -35,15 +35,25 @@ let inputCommands = CommandGroup(title: "Desktop input", commands: [
                 let foundRole = role.isEmpty ? "an unnamed element" : role
                 throw CLIError.usage("Paste blocked: --target-path must resolve to a writable AX text control, not \(foundRole)")
             }
-            // Safe external-message mode never emits a global HID keyboard event.
-            // macOS does not bind such events to a PID, so a focus race can otherwise
-            // write into another app.  Unsupported web views therefore fail closed.
+            // Prefer process-targeted AX value writing. Some web views do not support
+            // it, in which case emulate the assistive-technology focus/paste flow and
+            // require a proof that this exact composer now contains the full draft.
             if (try? setAttribute(target, "AXValue", text as CFTypeRef)) != nil,
-               sameVisibleText(textAttribute(target, "AXValue", profile: context.profile), text) {
+               hasExactVisibleText(in: target, expected: text, profile: context.profile) {
                 verified = true
             }
+            if !verified {
+                guard let point = center(of: target, profile: context.profile) else {
+                    throw CLIError.accessibility("Paste blocked: --target-path has no usable on-screen bounds")
+                }
+                try postMouseClick(x: point.x, y: point.y)
+                _ = try requireInputTarget(pidText: invocation.optional("pid"))
+                verified = try pasteText(text, profile: context.profile) {
+                    hasExactVisibleText(in: target, expected: text, profile: context.profile)
+                }
+            }
             guard verified else {
-                throw CLIError.accessibility("Paste blocked: the target did not expose exactly the requested text through AXValue; do not press Send")
+                throw CLIError.accessibility("Paste blocked: the composer did not expose exactly the requested text; do not press Send")
             }
         } else {
             _ = try pasteText(text, profile: context.profile)

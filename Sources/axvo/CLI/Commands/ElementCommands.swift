@@ -47,8 +47,7 @@ let elementCommands = CommandGroup(title: "Elements", commands: [
         }
         if let requiredValuePath, let requiredValue {
             let draft = try elementAtPath(requiredValuePath, from: try invocation.application(), profile: context.profile)
-            let actual = textAttribute(draft, kAXValueAttribute, profile: context.profile)
-            guard sameVisibleText(actual, requiredValue) else {
+            guard hasExactVisibleText(in: draft, expected: requiredValue, profile: context.profile) else {
                 throw CLIError.accessibility("Press blocked: the required draft does not exactly match --require-value")
             }
         }

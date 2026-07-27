@@ -100,6 +100,40 @@ func sameVisibleText(_ actual: String, _ expected: String) -> Bool {
     return normalized(actual) == normalized(expected)
 }
 
+func containsExactVisibleText(_ candidates: [String], _ expected: String) -> Bool {
+    candidates.contains { sameVisibleText($0, expected) }
+}
+
+/// A draft can be exposed by AXValue, AXTitle, or AXDescription depending on the
+/// framework.  Look only inside the writer's own AX subtree, never across the window
+/// or message history, so an old message cannot satisfy the send precondition.
+func hasExactVisibleText(in root: AXUIElement, expected: String, profile: Profile? = nil) -> Bool {
+    !findDescendants(of: root, depth: 4, limit: 1, profile: profile) { element in
+        let attributes = copyAttributes(element, ["AXValue", "AXTitle", "AXDescription"], profile: profile)
+        let candidates = attributes.values.map { String(describing: textValue($0)) }
+        return containsExactVisibleText(candidates, expected)
+    }.isEmpty
+}
+
+/// The screen point used for a direct click on an AX element. This is derived from
+/// the current live element rather than caller-supplied coordinates.
+func center(of element: AXUIElement, profile: Profile? = nil) -> CGPoint? {
+    let values = copyAttributes(element, ["AXPosition", "AXSize"], profile: profile)
+    guard let position = values["AXPosition"], let size = values["AXSize"] else { return nil }
+    let positionReference = position as CFTypeRef
+    let sizeReference = size as CFTypeRef
+    guard CFGetTypeID(positionReference) == AXValueGetTypeID(),
+          CFGetTypeID(sizeReference) == AXValueGetTypeID() else { return nil }
+    let positionValue = unsafeDowncast(positionReference, to: AXValue.self)
+    let sizeValue = unsafeDowncast(sizeReference, to: AXValue.self)
+    var point = CGPoint.zero
+    var dimensions = CGSize.zero
+    guard AXValueGetValue(positionValue, .cgPoint, &point),
+          AXValueGetValue(sizeValue, .cgSize, &dimensions),
+          dimensions.width > 0, dimensions.height > 0 else { return nil }
+    return CGPoint(x: point.x + dimensions.width / 2, y: point.y + dimensions.height / 2)
+}
+
 private let summaryAttributes = [
     "AXRole", "AXSubrole", "AXTitle", "AXDescription", "AXValue",
     "AXIdentifier", "AXEnabled", "AXFocused", "AXSelected", "AXPosition", "AXSize"

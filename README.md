@@ -63,7 +63,7 @@ blindy key --key return
 
 If a web-based composer filters direct Unicode input, use `blindy paste --text 'Hello from Blindly'`. It pastes via Command-V and restores the previous text clipboard after the target app receives the paste.
 
-For a message that will be sent externally, use the verified form. It writes only through the process-targeted AX API, requires the intended PID, and refuses success unless that element exposes exactly the requested draft text. It never falls back to a global keyboard event, which could be delivered to another application. Bind Send to the same exact draft immediately before the action:
+For a message that will be sent externally, use the verified form. It requires the intended PID and refuses success unless the composer's own AX subtree exposes exactly the requested draft text. It first tries process-targeted AX value writing; if that is unsupported, it focuses the live AX composer and uses the same paste route a keyboard user would. Bind Send to the same exact draft immediately before the action:
 
 ```sh
 blindy paste --pid 14476 --target-path 0.2.4 --text 'Hello from Blindly'
@@ -71,7 +71,7 @@ blindy press --pid 14476 --path 0.2.5 --expect-description Send \
   --require-value-path 0.2.4 --require-value 'Hello from Blindly'
 ```
 
-If the composer does not expose its current text through `AXValue`, Blindly fails closed: inspect the UI instead of sending. This prevents a pre-existing draft or a paste delivered to another control from being sent accidentally.
+If the composer cannot expose the exact draft through its own AX value, title, description, or descendants, Blindly fails closed. This prevents a pre-existing draft or text from another control from being sent accidentally.
 
 ## Interactive shell
 
