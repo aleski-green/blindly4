@@ -33,7 +33,7 @@ let sessionCommands = CommandGroup(title: "Session", commands: [
         }
         let root = try elementAtPath(path, from: app, profile: context.profile)
         let current = findDescendants(of: root, depth: depth, limit: limit, profile: context.profile) { _ in true }
-        let added = signaturesAdded(current: current.map { observableSignature(of: $0.element, profile: context.profile) }, since: previous)
+        let added = Set(current.map { observableSignature(of: $0.element, profile: context.profile) }).subtracting(previous)
         let changes = current.filter { added.contains(observableSignature(of: $0.element, profile: context.profile)) }
         printJSON(["since": name, "changes": changes.map { detail(of: $0.element, path: $0.path, profile: context.profile) }], to: context)
     }

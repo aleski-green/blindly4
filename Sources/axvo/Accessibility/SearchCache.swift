@@ -76,11 +76,6 @@ func observableSignature(of element: AXUIElement, profile: Profile? = nil) -> St
         .map { values[$0].map { String(describing: textValue($0)) } ?? "" }
         .joined(separator: "\u{1F}")
 }
-
-func signaturesAdded(current: [String], since previous: Set<String>) -> Set<String> {
-    Set(current).subtracting(previous)
-}
-
 private func processID(of element: AXUIElement) -> Int {
     var pid: pid_t = 0
     AXUIElementGetPid(element, &pid)
