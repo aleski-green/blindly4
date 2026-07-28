@@ -100,18 +100,13 @@ func sameVisibleText(_ actual: String, _ expected: String) -> Bool {
     return normalized(actual) == normalized(expected)
 }
 
-func containsExactVisibleText(_ candidates: [String], _ expected: String) -> Bool {
-    candidates.contains { sameVisibleText($0, expected) }
-}
-
 /// A draft can be exposed by AXValue, AXTitle, or AXDescription depending on the
 /// framework.  Look only inside the writer's own AX subtree, never across the window
 /// or message history, so an old message cannot satisfy the send precondition.
 func hasExactVisibleText(in root: AXUIElement, expected: String, profile: Profile? = nil) -> Bool {
     !findDescendants(of: root, depth: 4, limit: 1, profile: profile) { element in
         let attributes = copyAttributes(element, ["AXValue", "AXTitle", "AXDescription"], profile: profile)
-        let candidates = attributes.values.map { String(describing: textValue($0)) }
-        return containsExactVisibleText(candidates, expected)
+        return attributes.values.contains { sameVisibleText(String(describing: textValue($0)), expected) }
     }.isEmpty
 }
 

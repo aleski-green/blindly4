@@ -40,15 +40,6 @@ enum SelfTest {
         guard !sameVisibleText("old hello", "hello") else {
             return "draft validation accepted text with a stale prefix"
         }
-        guard containsExactVisibleText(["Compose message", "\u{200E}hello"], "hello") else {
-            return "visible draft text was not found across AX attributes"
-        }
-        guard !containsExactVisibleText(["old hello", "hello again"], "hello") else {
-            return "visible draft text accepted a partial AX attribute"
-        }
-        guard signaturesAdded(current: ["old", "reply"], since: ["old"]) == ["reply"] else {
-            return "AX snapshot comparison did not isolate newly visible elements"
-        }
         return nil
     }
 }

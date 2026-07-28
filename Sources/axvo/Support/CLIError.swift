@@ -5,9 +5,7 @@ enum CLIError: Error {
     case accessibility(String)
 }
 
-/// Renders a failure and returns the exit code the top level should use. The
-/// interactive shell reports the same text but keeps running, so it ignores the code.
-@discardableResult
+/// Renders a failure and returns the exit code the top level should use.
 func report(_ error: Error, showUsage: Bool, to context: ExecutionContext) -> Int32 {
     switch error {
     case CLIError.usage(let message):

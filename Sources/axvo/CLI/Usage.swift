@@ -15,8 +15,7 @@ func usage() -> String {
     Pass `--pid` to click, type, paste, or key to verify that exact app is frontmost
     before Blindly injects a system-wide input event.
 
-    Run `blindy shell` for an interactive prompt. Type `help` or `exit` there.
-    Add `--profile` to any non-shell command for timing, AX-read, and cache counters.
+    Add `--profile` to any command for timing, AX-read, and cache counters.
     Add `--no-service` before a command to bypass the local service for diagnostics.
     """
 }

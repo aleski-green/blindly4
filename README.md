@@ -73,22 +73,6 @@ blindy press --pid 14476 --path 0.2.5 --expect-description Send \
 
 If the composer cannot expose the exact draft through its own AX value, title, description, or descendants, Blindly fails closed. This prevents a pre-existing draft or text from another control from being sent accidentally.
 
-## Interactive shell
-
-Use this when you want to explore without repeatedly typing the executable path:
-
-```sh
-blindy shell
-```
-
-```text
-blindy> apps
-blindy> show --pid 1317 --depth 4
-blindy> find --pid 1317 --title "Settings"
-blindy> press --pid 1317 --path 0.2.1
-blindy> exit
-```
-
 ## Watching for UI changes
 
 Use a memory-only snapshot to report new accessible elements in any region. This is
@@ -122,7 +106,6 @@ Sources/axvo/
   CLI/Commands/           one file per group of commands
   Accessibility/          AX element reading, tree walking, path resolution
   Input/                  synthetic mouse/keyboard events, NSWorkspace actions
-  Shell/                  interactive prompt, line editor, tokenizer
   Support/                JSON output, errors, argument parsing
 ```
 
@@ -138,9 +121,9 @@ Command("windows", "[--pid PID]") { invocation in
 ```
 
 The registry supplies the accessibility check and argument parsing, and the help text
-and shell tab completion are derived from the declared name and arguments, so no other
-file needs to change. Pass `requiresAccessibility: false` for commands that do not read
-the accessibility tree.
+is derived from the declared name and arguments, so no other file needs to change.
+Pass `requiresAccessibility: false` for commands that do not read the accessibility
+tree.
 
 ## Performance
 

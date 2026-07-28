@@ -1,8 +1,7 @@
 import Foundation
 
-/// A single CLI verb. `arguments` is the usage fragment shown in help and is also the
-/// source of the option names offered by shell tab completion, so a new command only
-/// has to be declared once, here, to be fully wired up.
+/// A single CLI verb. `arguments` is the usage fragment shown in help, so a new
+/// command only has to be declared once, here, to be fully wired up.
 struct Command: Sendable {
     let name: String
     let arguments: String
@@ -23,13 +22,6 @@ struct Command: Sendable {
 
     var usageLine: String {
         arguments.isEmpty ? "blindy \(name)" : "blindy \(name) \(arguments)"
-    }
-
-    var optionNames: [String] {
-        arguments
-            .split(whereSeparator: { " []|".contains($0) })
-            .map(String.init)
-            .filter { $0.hasPrefix("--") }
     }
 }
 

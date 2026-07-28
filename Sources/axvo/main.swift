@@ -23,12 +23,6 @@ if arguments.first == "serve" {
     exit(LocalServiceServer.run(socket: arguments[socketIndex + 1]))
 }
 
-// A terminal shell must retain its own stdin/stdout instead of being proxied.
-if arguments.first == "shell" {
-    runInteractiveShell()
-    exit(0)
-}
-
 let response = LocalServiceClient.execute(arguments) ?? CommandRegistry.execute(arguments)
 emit(response)
 exit(response.status)
