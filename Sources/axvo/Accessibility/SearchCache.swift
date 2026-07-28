@@ -43,6 +43,7 @@ private struct CachedTarget {
 /// Request-local state shared by the socket service. It never reaches disk.
 final class AccessibilitySession {
     private var targets: [SearchKey: CachedTarget] = [:]
+    private var snapshots: [String: Set<String>] = [:]
 
     fileprivate func target(for key: SearchKey) -> (path: String, signature: TargetSignature, windowFingerprint: String)? {
         guard var target = targets[key] else { return nil }
@@ -57,6 +58,27 @@ final class AccessibilitySession {
     }
 
     fileprivate func remove(_ key: SearchKey) { targets.removeValue(forKey: key) }
+
+    func storeSnapshot(_ signatures: Set<String>, name: String, pid: Int, path: String) {
+        snapshots["\(pid)\u{1F}\(path)\u{1F}\(name)"] = signatures
+    }
+
+    func snapshot(name: String, pid: Int, path: String) -> Set<String>? {
+        snapshots["\(pid)\u{1F}\(path)\u{1F}\(name)"]
+    }
+}
+
+/// A memory-only identity for observing generic AX-region changes. Paths are not
+/// included because insertions commonly shift them; a new title/value/description is.
+func observableSignature(of element: AXUIElement, profile: Profile? = nil) -> String {
+    let values = copyAttributes(element, ["AXRole", "AXTitle", "AXValue", "AXDescription", "AXIdentifier"], profile: profile)
+    return ["AXRole", "AXTitle", "AXValue", "AXDescription", "AXIdentifier"]
+        .map { values[$0].map { String(describing: textValue($0)) } ?? "" }
+        .joined(separator: "\u{1F}")
+}
+
+func signaturesAdded(current: [String], since previous: Set<String>) -> Set<String> {
+    Set(current).subtracting(previous)
 }
 
 private func processID(of element: AXUIElement) -> Int {

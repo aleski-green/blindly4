@@ -63,6 +63,16 @@ blindy key --key return
 
 If a web-based composer filters direct Unicode input, use `blindy paste --text 'Hello from Blindly'`. It pastes via Command-V and restores the previous text clipboard after the target app receives the paste.
 
+For a message that will be sent externally, use the verified form. It requires the intended PID, clears the current AX draft, and refuses success unless the composer's own AX subtree exposes exactly the requested text. It focuses the live AX composer and retains the clipboard until the paste is observed (up to one second), so a delayed web view cannot paste a restored clipboard value. Bind Send to the same exact draft immediately before the action:
+
+```sh
+blindy paste --pid 14476 --target-path 0.2.4 --text 'Hello from Blindly'
+blindy press --pid 14476 --path 0.2.5 --expect-description Send \
+  --require-value-path 0.2.4 --require-value 'Hello from Blindly'
+```
+
+If the composer cannot expose the exact draft through its own AX value, title, description, or descendants, Blindly fails closed. This prevents a pre-existing draft or text from another control from being sent accidentally.
+
 ## Interactive shell
 
 Use this when you want to explore without repeatedly typing the executable path:
@@ -78,6 +88,21 @@ blindy> find --pid 1317 --title "Settings"
 blindy> press --pid 1317 --path 0.2.1
 blindy> exit
 ```
+
+## Watching for UI changes
+
+Use a memory-only snapshot to report new accessible elements in any region. This is
+universal: it does not assume an app's message labels or wording.
+
+```sh
+# Before an operation, record the chat/message region.
+blindy snapshot --pid 12345 --name before --path 0.2.1.0 --depth 7
+
+# After waiting, return only AX elements that were not present in that region.
+blindy changes --pid 12345 --since before --path 0.2.1.0 --depth 7
+```
+
+Snapshots live only in the local service process and disappear when it exits.
 
 ## Navigation workflow
 
@@ -128,5 +153,6 @@ command with `--no-service` to bypass the service for diagnostics.
 
 For system-wide input commands (`click`, `type`, `paste`, and `key`), pass `--pid` to
 make Blindly activate and verify the intended foreground application before it emits the
-event. This prevents text intended for one app from being injected into another app's
-composer.
+event. For external messages, also pass `paste --target-path` and use `press` with
+`--require-value-path` / `--require-value`; a PID guard alone cannot prove that a global
+keyboard event reached the intended composer.

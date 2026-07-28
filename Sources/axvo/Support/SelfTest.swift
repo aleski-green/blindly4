@@ -31,6 +31,24 @@ enum SelfTest {
         let normalizedA = SearchKey(pid: 1, title: "  ÁlEx ", role: "Button", value: nil)
         let normalizedB = SearchKey(pid: 1, title: "alex", role: "button", value: nil)
         guard normalizedA == normalizedB else { return "search-key normalization is inconsistent" }
+        guard sameVisibleText("\u{200E}hello\u{2069}", "hello") else {
+            return "visible draft text did not ignore AX directionality markers"
+        }
+        guard !sameVisibleText("hello (old draft)", "hello") else {
+            return "draft validation accepted text with a stale suffix"
+        }
+        guard !sameVisibleText("old hello", "hello") else {
+            return "draft validation accepted text with a stale prefix"
+        }
+        guard containsExactVisibleText(["Compose message", "\u{200E}hello"], "hello") else {
+            return "visible draft text was not found across AX attributes"
+        }
+        guard !containsExactVisibleText(["old hello", "hello again"], "hello") else {
+            return "visible draft text accepted a partial AX attribute"
+        }
+        guard signaturesAdded(current: ["old", "reply"], since: ["old"]) == ["reply"] else {
+            return "AX snapshot comparison did not isolate newly visible elements"
+        }
         return nil
     }
 }

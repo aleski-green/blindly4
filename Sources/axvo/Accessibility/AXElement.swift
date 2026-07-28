@@ -83,6 +83,57 @@ func textAttribute(_ element: AXUIElement, _ name: String, profile: Profile? = n
     return String(describing: textValue(value))
 }
 
+/// AX text frequently includes invisible directionality markers.  They do not alter
+/// what the person sees, so ignore only those markers while otherwise requiring an
+/// exact draft match.  In particular, this deliberately rejects prefixes, suffixes,
+/// and old text left in a composer.
+func sameVisibleText(_ actual: String, _ expected: String) -> Bool {
+    let invisibleDirectionality = CharacterSet(charactersIn: "\u{200E}\u{200F}\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}")
+    func normalized(_ text: String) -> String {
+        text
+            .precomposedStringWithCanonicalMapping
+            .unicodeScalars
+            .filter { !invisibleDirectionality.contains($0) }
+            .map(String.init)
+            .joined()
+    }
+    return normalized(actual) == normalized(expected)
+}
+
+func containsExactVisibleText(_ candidates: [String], _ expected: String) -> Bool {
+    candidates.contains { sameVisibleText($0, expected) }
+}
+
+/// A draft can be exposed by AXValue, AXTitle, or AXDescription depending on the
+/// framework.  Look only inside the writer's own AX subtree, never across the window
+/// or message history, so an old message cannot satisfy the send precondition.
+func hasExactVisibleText(in root: AXUIElement, expected: String, profile: Profile? = nil) -> Bool {
+    !findDescendants(of: root, depth: 4, limit: 1, profile: profile) { element in
+        let attributes = copyAttributes(element, ["AXValue", "AXTitle", "AXDescription"], profile: profile)
+        let candidates = attributes.values.map { String(describing: textValue($0)) }
+        return containsExactVisibleText(candidates, expected)
+    }.isEmpty
+}
+
+/// The screen point used for a direct click on an AX element. This is derived from
+/// the current live element rather than caller-supplied coordinates.
+func center(of element: AXUIElement, profile: Profile? = nil) -> CGPoint? {
+    let values = copyAttributes(element, ["AXPosition", "AXSize"], profile: profile)
+    guard let position = values["AXPosition"], let size = values["AXSize"] else { return nil }
+    let positionReference = position as CFTypeRef
+    let sizeReference = size as CFTypeRef
+    guard CFGetTypeID(positionReference) == AXValueGetTypeID(),
+          CFGetTypeID(sizeReference) == AXValueGetTypeID() else { return nil }
+    let positionValue = unsafeDowncast(positionReference, to: AXValue.self)
+    let sizeValue = unsafeDowncast(sizeReference, to: AXValue.self)
+    var point = CGPoint.zero
+    var dimensions = CGSize.zero
+    guard AXValueGetValue(positionValue, .cgPoint, &point),
+          AXValueGetValue(sizeValue, .cgSize, &dimensions),
+          dimensions.width > 0, dimensions.height > 0 else { return nil }
+    return CGPoint(x: point.x + dimensions.width / 2, y: point.y + dimensions.height / 2)
+}
+
 private let summaryAttributes = [
     "AXRole", "AXSubrole", "AXTitle", "AXDescription", "AXValue",
     "AXIdentifier", "AXEnabled", "AXFocused", "AXSelected", "AXPosition", "AXSize"
