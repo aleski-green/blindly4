@@ -12,10 +12,6 @@ enum CommandRegistry {
 
     static let all: [Command] = groups.flatMap(\.commands)
 
-    static let names: [String] = all.map(\.name).sorted()
-
-    static let optionFlags: [String] = Array(Set(all.flatMap(\.optionNames))).sorted()
-
     static func command(named name: String) -> Command? {
         all.first { $0.name == name }
     }
