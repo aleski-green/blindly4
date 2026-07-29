@@ -43,6 +43,7 @@ blindy focused
 # A path indexes AXChildren below the application root
 blindy inspect --path 0.2
 blindy actions --path 0.2
+blindy show-menu --path 0.2
 blindy press --path 0.2
 blindy set-value --path 0.2 --value 'new text'
 ```
@@ -93,7 +94,7 @@ Snapshots live only in the local service process and disappear when it exits.
 
 1. Put the application you want to inspect in front.
 2. Run `blindy show --depth 5` to see its accessible controls and paths, or search directly with `blindy find --title 'text you can see'`.
-3. Copy the returned `path` and use `blindy inspect --path PATH` to check its role and supported actions.
+3. Copy the returned `path` and use `blindy inspect --path PATH` to check its role and supported actions. Use `show-menu` when the element exposes `AXShowMenu`.
 4. For text fields, use `blindy focus --path PATH`, then `blindy set-value --path PATH --value 'text'`. For tabs and buttons, use `blindy press --path PATH`.
 
 `tree`, `show`, `find`, `focused`, `inspect`, `actions`, `apps`, and `changes` are

@@ -64,4 +64,10 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(command.optionNames, ["path", "require-selected"])
         XCTAssertEqual(command.metadata["risk"] as? String, "external-commit")
     }
+
+    func testShowMenuIsClassifiedAsUIMutation() {
+        let command = CommandRegistry.command(named: "show-menu")
+        XCTAssertEqual(command?.risk, .uiMutation)
+        XCTAssertEqual(command?.optionNames, ["path", "pid"])
+    }
 }

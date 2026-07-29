@@ -34,6 +34,15 @@ let elementCommands = CommandGroup(title: "Elements", commands: [
         printJSON(["path": target.path, "attribute": kAXFocusedAttribute, "ok": true], to: context)
     },
 
+    Command("show-menu", pathArguments, summary: "Open an element's accessibility context menu.", risk: .uiMutation) { invocation, context in
+        let target = try invocation.element(profile: context.profile)
+        guard actions(of: target.element, profile: context.profile).contains(kAXShowMenuAction) else {
+            throw CLIError.usage("show-menu target does not support \(kAXShowMenuAction)")
+        }
+        try performAction(target.element, kAXShowMenuAction)
+        printJSON(["path": target.path, "action": kAXShowMenuAction, "ok": true], to: context)
+    },
+
     Command("press", "\(pathArguments) [--expect-description TEXT] [--require-selected] [--require-value-path PATH --require-value TEXT]", summary: "Perform AXPress; this may trigger an irreversible external action.", risk: .externalCommit) { invocation, context in
         let target = try invocation.element(profile: context.profile)
         if let expected = invocation.optional("expect-description"),
