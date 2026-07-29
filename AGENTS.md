@@ -14,18 +14,16 @@ Run these commands from the repository root:
 swift build
 swift run blindy --self-test
 swift run blindy schema
-swift test                    # requires full Xcode; see below
 ```
 
 The package requires macOS 13 or newer and Swift 6. Commands that inspect or operate
 the AX tree also require Accessibility permission for the terminal or host process.
-Unit tests and `--self-test` must not require that permission.
+`--self-test` must not require that permission.
 
-`swift test` needs the XCTest framework, which ships with Xcode rather than the
-Command Line Tools, so it fails with `no such module 'XCTest'` on a CLT-only host. CI
-runs it on every pull request. `--self-test` is the dependency-free gate that always
-runs locally, so mirror any safety-critical assertion there as well as in
-`Tests/axvoTests`.
+`--self-test` is the only automated gate, and it depends on nothing beyond the
+package itself, so it runs anywhere the executable builds. Add coverage for new
+parsing, traversal, normalization, or safety preconditions to
+`Sources/axvo/Support/SelfTest.swift`.
 
 ## Architecture
 
@@ -35,7 +33,6 @@ runs locally, so mirror any safety-critical assertion there as well as in
 - `Sources/axvo/Input/`: application activation and synthetic keyboard/mouse input
 - `Sources/axvo/Service/`: per-user, memory-only Unix socket service
 - `Sources/axvo/Support/`: parsing, errors, output, profiling, and self-tests
-- `Tests/axvoTests/`: permission-free unit tests
 
 Commands are declared once in a `CommandGroup`. Keep their summary, risk,
 accessibility requirement, usage, and implementation together. `blindy schema`
@@ -70,7 +67,7 @@ Changes to these invariants require explicit review and focused tests.
 
 ## Testing changes
 
-Prefer permission-free tests for parsing, traversal, normalization, output, and safety
-preconditions. Accessibility integration tests are manual because CI cannot inspect
-arbitrary desktop applications. When changing UI operations, test against a harmless
-local target before trying a composer or control with external effects.
+Keep checks permission-free and inside `--self-test`. Accessibility integration
+testing is manual because CI cannot inspect arbitrary desktop applications. When
+changing UI operations, test against a harmless local target before trying a composer
+or control with external effects.

@@ -117,7 +117,6 @@ Sources/axvo/
   Input/                  synthetic mouse/keyboard events, NSWorkspace actions
   Service/                memory-only local service and Unix socket transport
   Support/                JSON output, errors, argument parsing
-Tests/axvoTests/           permission-free unit tests
 ```
 
 ## Adding a command
@@ -148,12 +147,10 @@ Run the permission-free validation suite from the repository root:
 swift build
 swift run blindy --self-test
 swift run blindy schema
-swift test                    # requires full Xcode, not just the Command Line Tools
 ```
 
-`swift test` reports `no such module 'XCTest'` on a host that has only the Command
-Line Tools installed; CI runs it on every pull request, and `swift run blindy
---self-test` covers the same core invariants with no test framework.
+`--self-test` needs no test framework and no Accessibility permission, so it runs
+anywhere the executable builds. CI runs the same commands on every pull request.
 
 Commands that access a live application's AX tree require macOS Accessibility
 permission and are intentionally excluded from automated CI. Exit status `64`

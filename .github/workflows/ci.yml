@@ -14,8 +14,6 @@ jobs:
         run: swift --version
       - name: Build
         run: swift build
-      - name: Unit tests
-        run: swift test
       - name: Dependency-free self-test
         run: swift run blindy --self-test
       - name: Machine-readable schema

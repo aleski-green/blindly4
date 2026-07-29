@@ -1,7 +1,8 @@
 import Foundation
 
-/// Dependency-free checks for the generic hot path. Kept in the executable because
-/// the macOS Command Line Tools runtime used by this package does not ship XCTest.
+/// Dependency-free checks for the generic hot path and the CLI contracts that guard
+/// unsafe input. Kept in the executable so `blindy --self-test` validates the build
+/// anywhere it can run, with no test framework and no Accessibility permission.
 enum SelfTest {
     private struct Node {
         let name: String
@@ -51,6 +52,33 @@ enum SelfTest {
               CommandRegistry.requestsCommandHelp(["--help"]),
               CommandRegistry.requestsCommandHelp(["--path", "0.2", "--help"]) else {
             return "a help request was not recognized"
+        }
+        do {
+            _ = try Invocation(command: "find", arguments: ["--titel", "Settings"], allowedOptions: ["title"])
+            return "a misspelled option was accepted instead of rejected"
+        } catch CLIError.usage(let message) where message.contains("--titel") {
+            // Expected: an unknown option must fail rather than be silently dropped.
+        } catch {
+            return "a misspelled option did not produce a usage error"
+        }
+        let press = CommandRegistry.command(named: "press")
+        guard press?.risk == .externalCommit, press?.optionNames.contains("require-selected") == true else {
+            return "command metadata lost the risk classification or its declared options"
+        }
+        if let failure = checkSchemaDescribesEveryCommand() { return failure }
+        return nil
+    }
+
+    /// The schema is how an agent discovers what exists, so it has to stay complete.
+    private static func checkSchemaDescribesEveryCommand() -> String? {
+        let response = CommandRegistry.execute(["schema"])
+        guard let object = try? JSONSerialization.jsonObject(with: Data(response.stdout.utf8)) as? JSON,
+              let commands = object["commands"] as? [JSON] else {
+            return "the schema command did not produce readable JSON"
+        }
+        guard commands.count == CommandRegistry.all.count,
+              commands.contains(where: { $0["name"] as? String == "schema" }) else {
+            return "the schema omitted a command"
         }
         return nil
     }
