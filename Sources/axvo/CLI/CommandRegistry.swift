@@ -26,7 +26,7 @@ enum CommandRegistry {
             throw CLIError.usage("Unknown command: \(name)")
         }
         let commandArguments = Array(arguments.dropFirst())
-        if commandArguments.contains(where: isHelpFlag) {
+        if requestsCommandHelp(commandArguments) {
             context.writeStdout(commandHelp(command) + "\n")
             return
         }
@@ -53,6 +53,15 @@ enum CommandRegistry {
         }
         if profileEnabled { context.writeStderr(context.profile.render()) }
         return context.response(status: status)
+    }
+
+    /// `help` and `-h` are ordinary text that a caller may legitimately pass as an
+    /// option value, so they only request help in the leading position. Treating them
+    /// as help anywhere turns `type --text help` into a no-op that still exits 0, which
+    /// reads as success to a calling agent. `--help` is unambiguous in any position
+    /// because a value may never start with `--`.
+    static func requestsCommandHelp(_ commandArguments: [String]) -> Bool {
+        (commandArguments.first.map(isHelpFlag) ?? false) || commandArguments.contains("--help")
     }
 
     private static func isHelpFlag(_ token: String) -> Bool {

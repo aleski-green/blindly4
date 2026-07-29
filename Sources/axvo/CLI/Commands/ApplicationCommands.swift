@@ -19,9 +19,7 @@ let applicationCommands = CommandGroup(title: "Applications", commands: [
     Command("schema", summary: "Print machine-readable command and safety metadata.", requiresAccessibility: false) { _, context in
         printJSON([
             "schemaVersion": 1,
-            "commands": CommandRegistry.all
-                .filter { $0.name != "schema" }
-                .map(\.metadata)
+            "commands": CommandRegistry.all.map(\.metadata)
         ], to: context)
     }
 ])

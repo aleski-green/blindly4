@@ -146,10 +146,14 @@ Run the permission-free validation suite from the repository root:
 
 ```sh
 swift build
-swift test
 swift run blindy --self-test
 swift run blindy schema
+swift test                    # requires full Xcode, not just the Command Line Tools
 ```
+
+`swift test` reports `no such module 'XCTest'` on a host that has only the Command
+Line Tools installed; CI runs it on every pull request, and `swift run blindy
+--self-test` covers the same core invariants with no test framework.
 
 Commands that access a live application's AX tree require macOS Accessibility
 permission and are intentionally excluded from automated CI. Exit status `64`

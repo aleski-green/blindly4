@@ -12,14 +12,20 @@ Run these commands from the repository root:
 
 ```sh
 swift build
-swift test
 swift run blindy --self-test
 swift run blindy schema
+swift test                    # requires full Xcode; see below
 ```
 
 The package requires macOS 13 or newer and Swift 6. Commands that inspect or operate
 the AX tree also require Accessibility permission for the terminal or host process.
 Unit tests and `--self-test` must not require that permission.
+
+`swift test` needs the XCTest framework, which ships with Xcode rather than the
+Command Line Tools, so it fails with `no such module 'XCTest'` on a CLT-only host. CI
+runs it on every pull request. `--self-test` is the dependency-free gate that always
+runs locally, so mirror any safety-critical assertion there as well as in
+`Tests/axvoTests`.
 
 ## Architecture
 

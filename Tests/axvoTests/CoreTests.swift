@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import axvo
 
@@ -71,5 +72,29 @@ final class CoreTests: XCTestCase {
         let command = CommandRegistry.command(named: "show-menu")
         XCTAssertEqual(command?.risk, .uiMutation)
         XCTAssertEqual(command?.optionNames, ["path", "pid"])
+    }
+
+    func testOptionValuesAreNotMistakenForHelpRequests() {
+        XCTAssertFalse(CommandRegistry.requestsCommandHelp(["--text", "help"]))
+        XCTAssertFalse(CommandRegistry.requestsCommandHelp(["--value", "-h"]))
+        XCTAssertTrue(CommandRegistry.requestsCommandHelp(["help"]))
+        XCTAssertTrue(CommandRegistry.requestsCommandHelp(["-h"]))
+        XCTAssertTrue(CommandRegistry.requestsCommandHelp(["--path", "0.2", "--help"]))
+    }
+
+    func testCommandWithHelpAsAValueDoesNotPrintHelp() {
+        // `find` is read-only, so this stays harmless whether or not the host granted
+        // Accessibility permission.
+        let response = CommandRegistry.execute(["find", "--title", "help"])
+        XCTAssertFalse(response.stdout.contains("Risk:"))
+    }
+
+    func testSchemaDescribesEveryCommandIncludingItself() throws {
+        let response = CommandRegistry.execute(["schema"])
+        let object = try JSONSerialization.jsonObject(with: Data(response.stdout.utf8)) as? JSON
+        let commands = try XCTUnwrap(object?["commands"] as? [JSON])
+
+        XCTAssertEqual(commands.count, CommandRegistry.all.count)
+        XCTAssertTrue(commands.contains { $0["name"] as? String == "schema" })
     }
 }

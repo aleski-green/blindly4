@@ -43,6 +43,15 @@ enum SelfTest {
         guard isVisiblyEmpty("\n\u{200E}"), !isVisiblyEmpty("\nold draft") else {
             return "visible-empty validation accepted or rejected the wrong draft"
         }
+        guard !CommandRegistry.requestsCommandHelp(["--text", "help"]),
+              !CommandRegistry.requestsCommandHelp(["--path", "0.2", "--value", "-h"]) else {
+            return "an option value was mistaken for a help request"
+        }
+        guard CommandRegistry.requestsCommandHelp(["help"]),
+              CommandRegistry.requestsCommandHelp(["--help"]),
+              CommandRegistry.requestsCommandHelp(["--path", "0.2", "--help"]) else {
+            return "a help request was not recognized"
+        }
         return nil
     }
 }
