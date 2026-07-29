@@ -8,7 +8,7 @@ struct Invocation {
     let flags: Set<String>
     let positionals: [String]
 
-    init(command: String, arguments: [String]) throws {
+    init(command: String, arguments: [String], allowedOptions: Set<String>? = nil) throws {
         var options: [String: String] = [:]
         var flags: Set<String> = []
         var positionals: [String] = []
@@ -20,6 +20,10 @@ struct Invocation {
                 index += 1
                 continue
             }
+            let optionName = String(token.dropFirst(2))
+            if let allowedOptions, !allowedOptions.contains(optionName) {
+                throw CLIError.usage("Unknown option for \(command): \(token)")
+            }
             if token == "--require-selected" {
                 flags.insert("require-selected")
                 index += 1
@@ -28,7 +32,7 @@ struct Invocation {
             guard index + 1 < arguments.count, !arguments[index + 1].hasPrefix("--") else {
                 throw CLIError.usage("Missing value for \(token)")
             }
-            options[String(token.dropFirst(2))] = arguments[index + 1]
+            options[optionName] = arguments[index + 1]
             index += 2
         }
         self.command = command

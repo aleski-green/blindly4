@@ -25,7 +25,16 @@ enum CommandRegistry {
         guard let command = command(named: name) else {
             throw CLIError.usage("Unknown command: \(name)")
         }
-        let invocation = try Invocation(command: name, arguments: Array(arguments.dropFirst()))
+        let commandArguments = Array(arguments.dropFirst())
+        if commandArguments.contains(where: isHelpFlag) {
+            context.writeStdout(commandHelp(command) + "\n")
+            return
+        }
+        let invocation = try Invocation(
+            command: name,
+            arguments: commandArguments,
+            allowedOptions: command.optionNames
+        )
         if command.requiresAccessibility { try requireAccessibility() }
         try command.handler(invocation, context)
     }
@@ -48,5 +57,14 @@ enum CommandRegistry {
 
     private static func isHelpFlag(_ token: String) -> Bool {
         ["--help", "-h", "help"].contains(token)
+    }
+
+    private static func commandHelp(_ command: Command) -> String {
+        [
+            command.usageLine,
+            command.summary,
+            "Risk: \(command.risk.rawValue)",
+            "Requires Accessibility permission: \(command.requiresAccessibility ? "yes" : "no")"
+        ].filter { !$0.isEmpty }.joined(separator: "\n")
     }
 }

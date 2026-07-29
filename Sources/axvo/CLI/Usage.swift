@@ -1,7 +1,9 @@
 /// Help text is generated from the registry so a new command documents itself.
 func usage() -> String {
     let sections = CommandRegistry.groups.map { group in
-        ([group.title + ":"] + group.commands.map { "  " + $0.usageLine }).joined(separator: "\n")
+        ([group.title + ":"] + group.commands.map {
+            "  \($0.usageLine)\($0.summary.isEmpty ? "" : "\n      \($0.summary)")"
+        }).joined(separator: "\n")
     }
     return """
     blindy — macOS Accessibility tree CLI
@@ -17,5 +19,7 @@ func usage() -> String {
 
     Add `--profile` to any command for timing, AX-read, and cache counters.
     Add `--no-service` before a command to bypass the local service for diagnostics.
+    Use `blindy COMMAND --help` for command-specific safety and permission metadata.
+    Use `blindy schema` for machine-readable command metadata.
     """
 }

@@ -1,11 +1,11 @@
 import ApplicationServices
 
 let sessionCommands = CommandGroup(title: "Session", commands: [
-    Command("request-permission", requiresAccessibility: false) { _, context in
+    Command("request-permission", summary: "Request macOS Accessibility permission.", risk: .uiMutation, requiresAccessibility: false) { _, context in
         printJSON(requestAccessibilityPermission(), to: context)
     },
 
-    Command("snapshot", "--name NAME --path INDEX[.INDEX...] [--pid PID] [--depth N] [--max-nodes N]") { invocation, context in
+    Command("snapshot", "--name NAME --path INDEX[.INDEX...] [--pid PID] [--depth N] [--max-nodes N]", summary: "Store an in-memory snapshot of an AX subtree.", risk: .localState) { invocation, context in
         let name = try invocation.value("name")
         let path = try invocation.value("path")
         let depth = try invocation.integer("depth", default: 8, minimum: 0)
@@ -20,7 +20,7 @@ let sessionCommands = CommandGroup(title: "Session", commands: [
         printJSON(["name": name, "path": path, "elements": signatures.count, "ok": true], to: context)
     },
 
-    Command("changes", "--since NAME --path INDEX[.INDEX...] [--pid PID] [--depth N] [--max-nodes N]") { invocation, context in
+    Command("changes", "--since NAME --path INDEX[.INDEX...] [--pid PID] [--depth N] [--max-nodes N]", summary: "Report elements added since an in-memory snapshot.") { invocation, context in
         let name = try invocation.value("since")
         let path = try invocation.value("path")
         let depth = try invocation.integer("depth", default: 8, minimum: 0)
