@@ -1,7 +1,7 @@
 import CoreFoundation
 
 let inputCommands = CommandGroup(title: "Desktop input", commands: [
-    Command("click", "--x X --y Y [--pid PID]") { invocation, context in
+    Command("click", "--x X --y Y [--pid PID]", summary: "Inject a system-wide mouse click.", risk: .uiMutation) { invocation, context in
         let x = try invocation.number("x")
         let y = try invocation.number("y")
         let pid = try requireInputTarget(pidText: invocation.optional("pid"))
@@ -11,7 +11,7 @@ let inputCommands = CommandGroup(title: "Desktop input", commands: [
         printJSON(result, to: context)
     },
 
-    Command("type", "--text TEXT [--pid PID]") { invocation, context in
+    Command("type", "--text TEXT [--pid PID]", summary: "Inject system-wide keyboard text.", risk: .uiMutation) { invocation, context in
         let text = try invocation.value("text")
         let pid = try requireInputTarget(pidText: invocation.optional("pid"))
         try postText(text)
@@ -20,7 +20,7 @@ let inputCommands = CommandGroup(title: "Desktop input", commands: [
         printJSON(result, to: context)
     },
 
-    Command("paste", "--text TEXT [--pid PID] [--target-path PATH]") { invocation, context in
+    Command("paste", "--text TEXT [--pid PID] [--target-path PATH]", summary: "Paste text, optionally verifying the exact target draft.", risk: .uiMutation) { invocation, context in
         let text = try invocation.value("text")
         let targetPath = invocation.optional("target-path")
         if targetPath != nil, invocation.optional("pid") == nil {
@@ -40,7 +40,7 @@ let inputCommands = CommandGroup(title: "Desktop input", commands: [
             // paste path for the actual edit and retain the clipboard until the exact
             // new draft is observed.
             try setAttribute(target, "AXValue", "" as CFTypeRef)
-            guard sameVisibleText(textAttribute(target, "AXValue", profile: context.profile), "") else {
+            guard isVisiblyEmpty(textAttribute(target, "AXValue", profile: context.profile)) else {
                 throw CLIError.accessibility("Paste blocked: the existing draft could not be cleared through AXValue")
             }
             guard let point = center(of: target, profile: context.profile) else {
@@ -63,7 +63,7 @@ let inputCommands = CommandGroup(title: "Desktop input", commands: [
         printJSON(result, to: context)
     },
 
-    Command("key", "--key return|tab|escape|space|delete|up|down|left|right|command+k [--pid PID]") { invocation, context in
+    Command("key", "--key return|tab|escape|space|delete|up|down|left|right|command+k [--pid PID]", summary: "Inject a system-wide key; Return may submit external data.", risk: .externalCommit) { invocation, context in
         let key = try invocation.value("key")
         let pid = try requireInputTarget(pidText: invocation.optional("pid"))
         try postKey(key)

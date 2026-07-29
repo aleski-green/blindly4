@@ -100,6 +100,16 @@ func sameVisibleText(_ actual: String, _ expected: String) -> Bool {
     return normalized(actual) == normalized(expected)
 }
 
+/// Web editors may expose an empty composer as a newline or invisible directionality
+/// markers. Accept only those formatting scalars as empty; any visible draft remains
+/// a hard failure.
+func isVisiblyEmpty(_ text: String) -> Bool {
+    let invisibleDirectionality = CharacterSet(charactersIn: "\u{200E}\u{200F}\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}")
+    return text.unicodeScalars.allSatisfy {
+        CharacterSet.whitespacesAndNewlines.contains($0) || invisibleDirectionality.contains($0)
+    }
+}
+
 /// A draft can be exposed by AXValue, AXTitle, or AXDescription depending on the
 /// framework.  Look only inside the writer's own AX subtree, never across the window
 /// or message history, so an old message cannot satisfy the send precondition.

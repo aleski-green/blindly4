@@ -25,7 +25,16 @@ enum CommandRegistry {
         guard let command = command(named: name) else {
             throw CLIError.usage("Unknown command: \(name)")
         }
-        let invocation = try Invocation(command: name, arguments: Array(arguments.dropFirst()))
+        let commandArguments = Array(arguments.dropFirst())
+        if requestsCommandHelp(commandArguments) {
+            context.writeStdout(commandHelp(command) + "\n")
+            return
+        }
+        let invocation = try Invocation(
+            command: name,
+            arguments: commandArguments,
+            allowedOptions: command.optionNames
+        )
         if command.requiresAccessibility { try requireAccessibility() }
         try command.handler(invocation, context)
     }
@@ -46,7 +55,25 @@ enum CommandRegistry {
         return context.response(status: status)
     }
 
+    /// `help` and `-h` are ordinary text that a caller may legitimately pass as an
+    /// option value, so they only request help in the leading position. Treating them
+    /// as help anywhere turns `type --text help` into a no-op that still exits 0, which
+    /// reads as success to a calling agent. `--help` is unambiguous in any position
+    /// because a value may never start with `--`.
+    static func requestsCommandHelp(_ commandArguments: [String]) -> Bool {
+        (commandArguments.first.map(isHelpFlag) ?? false) || commandArguments.contains("--help")
+    }
+
     private static func isHelpFlag(_ token: String) -> Bool {
         ["--help", "-h", "help"].contains(token)
+    }
+
+    private static func commandHelp(_ command: Command) -> String {
+        [
+            command.usageLine,
+            command.summary,
+            "Risk: \(command.risk.rawValue)",
+            "Requires Accessibility permission: \(command.requiresAccessibility ? "yes" : "no")"
+        ].filter { !$0.isEmpty }.joined(separator: "\n")
     }
 }

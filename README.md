@@ -5,7 +5,8 @@
 ## Build
 
 ```sh
-cd axvo
+git clone https://github.com/aleski-green/blindly4.git
+cd blindly4
 swift build -c release
 ./.build/release/blindy request-permission
 ```
@@ -42,6 +43,7 @@ blindy focused
 # A path indexes AXChildren below the application root
 blindy inspect --path 0.2
 blindy actions --path 0.2
+blindy show-menu --path 0.2
 blindy press --path 0.2
 blindy set-value --path 0.2 --value 'new text'
 ```
@@ -92,10 +94,17 @@ Snapshots live only in the local service process and disappear when it exits.
 
 1. Put the application you want to inspect in front.
 2. Run `blindy show --depth 5` to see its accessible controls and paths, or search directly with `blindy find --title 'text you can see'`.
-3. Copy the returned `path` and use `blindy inspect --path PATH` to check its role and supported actions.
+3. Copy the returned `path` and use `blindy inspect --path PATH` to check its role and supported actions. Use `show-menu` when the element exposes `AXShowMenu`.
 4. For text fields, use `blindy focus --path PATH`, then `blindy set-value --path PATH --value 'text'`. For tabs and buttons, use `blindy press --path PATH`.
 
-`press`, `focus`, and `set-value` can change the target application's UI. All other commands are read-only. Use `blindy --help` for the complete command reference.
+`tree`, `show`, `find`, `focused`, `inspect`, `actions`, `apps`, and `changes` are
+read-only. `snapshot` changes only memory-local service state. Other commands can
+change the desktop UI; `press` and `key` can submit or commit an external action.
+Use `blindy --help` for the command reference, `blindy COMMAND --help` for a
+command's risk classification, and `blindy schema` for machine-readable metadata.
+
+AX paths are indexes into a live tree and may change whenever the target UI updates.
+Rediscover the target immediately before performing a mutation.
 
 ## Project layout
 
@@ -106,7 +115,9 @@ Sources/axvo/
   CLI/Commands/           one file per group of commands
   Accessibility/          AX element reading, tree walking, path resolution
   Input/                  synthetic mouse/keyboard events, NSWorkspace actions
+  Service/                memory-only local service and Unix socket transport
   Support/                JSON output, errors, argument parsing
+Tests/axvoTests/           permission-free unit tests
 ```
 
 ## Adding a command
@@ -114,9 +125,13 @@ Sources/axvo/
 Declare it in the matching group in `CLI/Commands/`:
 
 ```swift
-Command("windows", "[--pid PID]") { invocation in
+Command(
+    "windows",
+    "[--pid PID]",
+    summary: "List application windows."
+) { invocation, context in
     let app = try invocation.application()
-    printJSON(["windows": children(of: app).map { summary(of: $0) }])
+    printJSON(["windows": children(of: app).map { summary(of: $0) }], to: context)
 }
 ```
 
@@ -124,6 +139,27 @@ The registry supplies the accessibility check and argument parsing, and the help
 is derived from the declared name and arguments, so no other file needs to change.
 Pass `requiresAccessibility: false` for commands that do not read the accessibility
 tree.
+
+## Development
+
+Run the permission-free validation suite from the repository root:
+
+```sh
+swift build
+swift run blindy --self-test
+swift run blindy schema
+swift test                    # requires full Xcode, not just the Command Line Tools
+```
+
+`swift test` reports `no such module 'XCTest'` on a host that has only the Command
+Line Tools installed; CI runs it on every pull request, and `swift run blindy
+--self-test` covers the same core invariants with no test framework.
+
+Commands that access a live application's AX tree require macOS Accessibility
+permission and are intentionally excluded from automated CI. Exit status `64`
+indicates invalid CLI usage, `77` indicates an Accessibility failure, and `1`
+indicates an unexpected error. `AGENTS.md` documents the architecture, output
+contracts, and safety invariants for coding agents and contributors.
 
 ## Performance
 

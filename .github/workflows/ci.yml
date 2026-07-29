@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Toolchain
+        run: swift --version
+      - name: Build
+        run: swift build
+      - name: Unit tests
+        run: swift test
+      - name: Dependency-free self-test
+        run: swift run blindy --self-test
+      - name: Machine-readable schema
+        run: swift run blindy schema
+      - name: Package test binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: blindy-${{ runner.arch }}
+          path: .build/debug/blindy

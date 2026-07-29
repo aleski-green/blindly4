@@ -5,7 +5,7 @@ private let pathArguments = "--path INDEX[.INDEX...] [--pid PID]"
 
 /// Commands that write a string attribute share everything but the attribute name.
 private func textAttributeCommand(_ name: String, attribute: String) -> Command {
-    Command(name, "--path INDEX[.INDEX...] --value TEXT [--pid PID]") { invocation, context in
+    Command(name, "--path INDEX[.INDEX...] --value TEXT [--pid PID]", summary: "Write \(attribute) on an accessibility element.", risk: .uiMutation) { invocation, context in
         let target = try invocation.element(profile: context.profile)
         let value = try invocation.value("value")
         try setAttribute(target.element, attribute, value as CFTypeRef)
@@ -14,16 +14,16 @@ private func textAttributeCommand(_ name: String, attribute: String) -> Command 
 }
 
 let elementCommands = CommandGroup(title: "Elements", commands: [
-    Command("inspect", pathArguments) { invocation, context in
+    Command("inspect", pathArguments, summary: "Inspect one accessibility element.") { invocation, context in
         printJSON(detail(of: try invocation.element(profile: context.profile).element, profile: context.profile), to: context)
     },
 
-    Command("actions", pathArguments) { invocation, context in
+    Command("actions", pathArguments, summary: "List actions supported by one element.") { invocation, context in
         let target = try invocation.element(profile: context.profile)
         printJSON(["path": target.path, "actions": actions(of: target.element, profile: context.profile).sorted()], to: context)
     },
 
-    Command("focus", pathArguments) { invocation, context in
+    Command("focus", pathArguments, summary: "Move keyboard focus to an element.", risk: .uiMutation) { invocation, context in
         let target = try invocation.element(profile: context.profile)
         try setAttribute(
             target.element,
@@ -34,7 +34,16 @@ let elementCommands = CommandGroup(title: "Elements", commands: [
         printJSON(["path": target.path, "attribute": kAXFocusedAttribute, "ok": true], to: context)
     },
 
-    Command("press", "\(pathArguments) [--expect-description TEXT] [--require-selected] [--require-value-path PATH --require-value TEXT]") { invocation, context in
+    Command("show-menu", pathArguments, summary: "Open an element's accessibility context menu.", risk: .uiMutation) { invocation, context in
+        let target = try invocation.element(profile: context.profile)
+        guard actions(of: target.element, profile: context.profile).contains(kAXShowMenuAction) else {
+            throw CLIError.usage("show-menu target does not support \(kAXShowMenuAction)")
+        }
+        try performAction(target.element, kAXShowMenuAction)
+        printJSON(["path": target.path, "action": kAXShowMenuAction, "ok": true], to: context)
+    },
+
+    Command("press", "\(pathArguments) [--expect-description TEXT] [--require-selected] [--require-value-path PATH --require-value TEXT]", summary: "Perform AXPress; this may trigger an irreversible external action.", risk: .externalCommit) { invocation, context in
         let target = try invocation.element(profile: context.profile)
         if let expected = invocation.optional("expect-description"),
            !textAttribute(target.element, "AXDescription", profile: context.profile).localizedCaseInsensitiveContains(expected) {
