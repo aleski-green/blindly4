@@ -19,3 +19,8 @@ jobs:
         run: swift run blindy --self-test
       - name: Machine-readable schema
         run: swift run blindy schema
+      - name: Package test binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: blindy-${{ runner.arch }}
+          path: .build/debug/blindy
