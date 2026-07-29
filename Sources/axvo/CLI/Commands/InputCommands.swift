@@ -40,7 +40,7 @@ let inputCommands = CommandGroup(title: "Desktop input", commands: [
             // paste path for the actual edit and retain the clipboard until the exact
             // new draft is observed.
             try setAttribute(target, "AXValue", "" as CFTypeRef)
-            guard sameVisibleText(textAttribute(target, "AXValue", profile: context.profile), "") else {
+            guard isVisiblyEmpty(textAttribute(target, "AXValue", profile: context.profile)) else {
                 throw CLIError.accessibility("Paste blocked: the existing draft could not be cleared through AXValue")
             }
             guard let point = center(of: target, profile: context.profile) else {

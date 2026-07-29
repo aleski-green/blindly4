@@ -40,6 +40,9 @@ enum SelfTest {
         guard !sameVisibleText("old hello", "hello") else {
             return "draft validation accepted text with a stale prefix"
         }
+        guard isVisiblyEmpty("\n\u{200E}"), !isVisiblyEmpty("\nold draft") else {
+            return "visible-empty validation accepted or rejected the wrong draft"
+        }
         return nil
     }
 }

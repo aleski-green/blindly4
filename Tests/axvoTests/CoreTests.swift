@@ -30,6 +30,8 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(sameVisibleText("\u{200E}hello\u{2069}", "hello"))
         XCTAssertFalse(sameVisibleText("old hello", "hello"))
         XCTAssertFalse(sameVisibleText("hello old", "hello"))
+        XCTAssertTrue(isVisiblyEmpty("\n\u{200E}"))
+        XCTAssertFalse(isVisiblyEmpty("\nold draft"))
     }
 
     func testSearchKeysNormalizeCaseWhitespaceAndDiacritics() {
