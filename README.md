@@ -106,6 +106,81 @@ command's risk classification, and `blindy schema` for machine-readable metadata
 AX paths are indexes into a live tree and may change whenever the target UI updates.
 Rediscover the target immediately before performing a mutation.
 
+## Using blindy inside Codex
+
+Blindly is a plain CLI that prints JSON to stdout, so a coding agent drives it by
+running shell commands and reading the result. Nothing else has to be wired up.
+
+Install it once and grant permission:
+
+```sh
+swift build -c release
+cp .build/release/blindy /usr/local/bin/
+blindy request-permission
+```
+
+Accessibility permission belongs to the process that runs the agent's shell, not to
+`blindy` itself. Grant it to Codex, or to the terminal hosting it, in **System
+Settings → Privacy & Security → Accessibility**. Without it every AX command exits
+`77`.
+
+Have the agent run `blindy schema` at the start of a session. It returns every
+command with its options and a `risk` field: `read-only` inspects without changing
+anything, `local-state` writes only in-memory service state, `ui-mutation` moves
+focus or injects input, and `external-commit` may send, submit, buy, or delete and
+must never be run speculatively.
+
+### Example: read a conversation and reply
+
+Each step depends on the previous one. The paths below are illustrative — take real
+ones from the `show` and `find` output.
+
+```sh
+# 1. Find the app and its PID.
+blindy apps
+
+# 2. Bring it forward and read a readable outline with paths.
+blindy activate --pid 14476
+blindy show --pid 14476 --depth 6
+
+# 3. Open the conversation by its visible name.
+blindy find --pid 14476 --title 'Jane Doe' --depth 10
+blindy press --pid 14476 --path 0.2.1.3
+
+# 4. Record the message region, wait, then read only what is new.
+blindy snapshot --pid 14476 --name before --path 0.2.4 --depth 7
+blindy changes --pid 14476 --since before --path 0.2.4 --depth 7
+
+# 5. Rediscover the composer, write the draft, and verify it.
+blindy find --pid 14476 --role AXTextArea --depth 10
+blindy paste --pid 14476 --target-path 0.2.6 --text 'Reply text'
+
+# 6. Send only after step 5 reported the exact draft.
+blindy press --pid 14476 --path 0.2.7 --expect-description Send \
+  --require-value-path 0.2.6 --require-value 'Reply text'
+```
+
+Steps 1 through 4 are safe to run unattended. Step 6 is `external-commit` and
+actually sends the message.
+
+### Rules for the agent
+
+- Re-run `find` immediately before any mutation. A path read thirty seconds ago may
+  now address a different element.
+- Pass `--pid` on input commands. It makes Blindly verify the foreground application
+  before emitting a system-wide event, so a window that steals focus cannot receive
+  the keystrokes.
+- Never send with bare `type` followed by `key --key return`. Use
+  `paste --target-path` with `press --require-value`, which fails closed unless the
+  composer exposes exactly the intended text.
+- There is no unread state in the accessibility tree. Use `snapshot` before and
+  `changes` after; this works regardless of how an app labels its messages.
+- Add `--require-selected` to `press` when the target exposes `AXSelected`, so a
+  follow-up step cannot act on a selection that never happened.
+- Check the exit code. `64` is invalid usage, `77` is a permission or accessibility
+  failure, `1` is unexpected. Do not continue a mutation sequence after a non-zero
+  exit.
+
 ## Project layout
 
 ```text
