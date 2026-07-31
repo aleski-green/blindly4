@@ -55,6 +55,10 @@ one log for its lifetime; `--no-service` creates one log for that direct invocat
 Logs live in `.logs/` at the package root and are named with their UTC start time,
 for example `session_s_20260731T175601123Z.ndjson`.
 
+> **Warning:** session logs can contain private text and command output. If you do
+> not want logging, add `--no-log` to an individual command or start Blindly with
+> `BLINDY_NO_LOG=1` to disable logging for the whole service process.
+
 Each line includes readable and numeric timestamps. Command entries include the
 complete arguments, resolved application name and PID, AX path, status, duration,
 stdout, and stderr. These files can therefore contain private text, URLs, search
