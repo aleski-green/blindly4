@@ -65,7 +65,79 @@ enum SelfTest {
         guard press?.risk == .externalCommit, press?.optionNames.contains("require-selected") == true else {
             return "command metadata lost the risk classification or its declared options"
         }
+        if let failure = checkSessionLogging() { return failure }
         if let failure = checkSchemaDescribesEveryCommand() { return failure }
+        return nil
+    }
+
+    private static func checkSessionLogging() -> String? {
+        let startedAt = Date(timeIntervalSince1970: 1_750_000_000.123)
+        let filename = SessionLogger.filename(for: startedAt)
+        guard filename == "session_s_20250615T150640123Z.ndjson" else {
+            return "session log filename is not a UTC start timestamp"
+        }
+
+        let response = ExecutionResponse(
+            stdout: "{\"characters\":6,\"ok\":true}\n",
+            stderr: "",
+            status: 0
+        )
+        let event = SessionLogger.commandEvent(
+            arguments: ["type", "--text", "secret"],
+            response: response,
+            elapsedMilliseconds: 12.5,
+            at: startedAt
+        )
+        guard event["cmd"] as? String == "type",
+              event["args"] as? [String] == ["--text", "secret"],
+              event["timestamp"] is Int64,
+              (event["stdout"] as? JSON)?["characters"] as? Int == 6 else {
+            return "session command event omitted plaintext arguments, timestamp, or stdout JSON"
+        }
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blindy-self-test-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let logger = SessionLogger(enabled: true, logDirectory: directory, startedAt: startedAt)
+        logger.log(
+            arguments: ["type", "--text", "secret"],
+            response: response,
+            elapsedMilliseconds: 12.5
+        )
+        logger.finish(reason: "self_test")
+
+        let url = directory.appendingPathComponent(filename)
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+            return "session logger did not create its NDJSON file"
+        }
+        let lines = text.split(separator: "\n")
+        guard lines.count == 3,
+              let command = try? JSONSerialization.jsonObject(
+                with: Data(lines[1].utf8)
+              ) as? JSON,
+              command["event"] as? String == "command",
+              command["args"] as? [String] == ["--text", "secret"] else {
+            return "session logger did not write start, command, and end NDJSON events"
+        }
+
+        let suppressedDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blindy-self-test-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: suppressedDirectory) }
+        let suppressed = SessionLogger(
+            enabled: true,
+            logDirectory: suppressedDirectory,
+            startedAt: startedAt
+        )
+        suppressed.log(
+            arguments: ["apps", "--no-log"],
+            response: response,
+            elapsedMilliseconds: 1
+        )
+        suppressed.finish(reason: "self_test")
+        guard !FileManager.default.fileExists(atPath: suppressedDirectory.path) else {
+            return "--no-log created an empty session log"
+        }
         return nil
     }
 

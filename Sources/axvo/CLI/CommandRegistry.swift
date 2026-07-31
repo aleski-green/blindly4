@@ -40,9 +40,14 @@ enum CommandRegistry {
     }
 
     /// Executes a command without allowing an error to escape the process boundary.
-    static func execute(_ rawArguments: [String], session: AccessibilitySession = AccessibilitySession()) -> ExecutionResponse {
+    static func execute(
+        _ rawArguments: [String],
+        session: AccessibilitySession = AccessibilitySession(),
+        logger: SessionLogger? = nil
+    ) -> ExecutionResponse {
+        let startedAt = Date()
         let profileEnabled = rawArguments.contains("--profile")
-        let arguments = rawArguments.filter { $0 != "--profile" }
+        let arguments = rawArguments.filter { $0 != "--profile" && $0 != "--no-log" }
         let context = ExecutionContext(session: session, profileEnabled: profileEnabled)
         let status: Int32
         do {
@@ -52,7 +57,13 @@ enum CommandRegistry {
             status = report(error, showUsage: true, to: context)
         }
         if profileEnabled { context.writeStderr(context.profile.render()) }
-        return context.response(status: status)
+        let response = context.response(status: status)
+        logger?.log(
+            arguments: rawArguments,
+            response: response,
+            elapsedMilliseconds: Date().timeIntervalSince(startedAt) * 1_000
+        )
+        return response
     }
 
     /// `help` and `-h` are ordinary text that a caller may legitimately pass as an

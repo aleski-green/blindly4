@@ -18,6 +18,8 @@ func usage() -> String {
     before Blindly injects a system-wide input event.
 
     Add `--profile` to any command for timing, AX-read, and cache counters.
+    Full plaintext session logs are written to `.logs/` at the package root by default.
+    Add `--no-log` to omit a command, or set `BLINDY_NO_LOG=1` to disable service logging.
     Add `--no-service` before a command to bypass the local service for diagnostics.
     Use `blindy COMMAND --help` for command-specific safety and permission metadata.
     Use `blindy schema` for machine-readable command metadata.

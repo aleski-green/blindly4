@@ -12,7 +12,9 @@ if arguments == ["--self-test"] {
 // Useful for diagnostics and service-parity checks; ordinary invocations use the
 // local service automatically.
 if arguments.first == "--no-service" {
-    let response = CommandRegistry.execute(Array(arguments.dropFirst()))
+    let logger = SessionLogger()
+    let response = CommandRegistry.execute(Array(arguments.dropFirst()), logger: logger)
+    logger.finish(reason: "process_exit")
     emit(response)
     exit(response.status)
 }
@@ -23,6 +25,13 @@ if arguments.first == "serve" {
     exit(LocalServiceServer.run(socket: arguments[socketIndex + 1]))
 }
 
-let response = LocalServiceClient.execute(arguments) ?? CommandRegistry.execute(arguments)
+let response: ExecutionResponse
+if let serviceResponse = LocalServiceClient.execute(arguments) {
+    response = serviceResponse
+} else {
+    let logger = SessionLogger()
+    response = CommandRegistry.execute(arguments, logger: logger)
+    logger.finish(reason: "process_exit")
+}
 emit(response)
 exit(response.status)
