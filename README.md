@@ -48,6 +48,26 @@ blindy press --path 0.2
 blindy set-value --path 0.2 --value 'new text'
 ```
 
+## Session logs
+
+Blindly writes a full plaintext NDJSON audit log by default. A service process uses
+one log for its lifetime; `--no-service` creates one log for that direct invocation.
+Logs live in `.logs/` at the package root and are named with their UTC start time,
+for example `session_s_20260731T175601123Z.ndjson`.
+
+> **Warning:** session logs can contain private text and command output. If you do
+> not want logging, add `--no-log` to an individual command or start Blindly with
+> `BLINDY_NO_LOG=1` to disable logging for the whole service process.
+
+Each line includes readable and numeric timestamps. Command entries include the
+complete arguments, resolved application name and PID, AX path, status, duration,
+stdout, and stderr. These files can therefore contain private text, URLs, search
+terms, clipboard-adjacent values, and UI metadata.
+
+Add `--no-log` to omit one command from a service log. Set `BLINDY_NO_LOG=1` before
+starting Blindly to disable logging for the whole service process. Set
+`BLINDY_LOG_DIR` to override the log directory.
+
 ## Sending through the desktop app
 
 Some web-based desktop apps (including Slack) expose their composer only as a web area. In that case, control the focused desktop application directly:

@@ -51,7 +51,13 @@ Treat desktop input as untrusted and potentially destructive.
 - `press` and `key` are `external-commit` because they may send, submit, buy, delete,
   or otherwise trigger an irreversible action.
 - Keep read-only commands free of external UI mutations.
-- Do not persist AX metadata, search text, snapshots, or clipboard contents.
+- Full plaintext session logging is enabled by default. Logs may contain command
+  arguments, AX metadata, search text, paths, text values, URLs, stdout, and stderr.
+  They are written to `.logs/` at the package root and must remain gitignored.
+- Use `--no-log` to omit one command from the session log, or start Blindly with
+  `BLINDY_NO_LOG=1` to disable logging for the whole service process.
+- Search caches and named AX snapshots remain memory-only and must not be serialized
+  separately from command output.
 
 Changes to these invariants require explicit review and focused tests.
 
