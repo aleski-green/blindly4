@@ -9,6 +9,7 @@
 
 | # | Test | App | Status | Key Finding |
 |---|------|-----|--------|-------------|
+| D | Deployment & Setup | — | PARTIAL | Service permission deadlock, `--no-service` workaround |
 | 0 | YouTube video search | Chrome | PASS | `open --url` is the reliable way to navigate web |
 | 1 | File operations | Finder | PARTIAL | Folder created, rename via AX failed |
 | 2 | Contact search + message | Telegram Lite | PASS* | Heavy workarounds — app barely exposes AX |
@@ -95,6 +96,7 @@ See `00-questions-and-ideas.md` for the full async coordination proposal.
 
 ## Files
 
+- `00-deployment.md` — Deployment & setup test report
 - `00-questions-and-ideas.md` — Open questions and feature ideas
 - `01-finder.md` — Finder test report
 - `02-telegram.md` — Telegram Lite test report
