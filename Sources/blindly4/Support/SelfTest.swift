@@ -1,7 +1,7 @@
 import Foundation
 
 /// Dependency-free checks for the generic hot path and the CLI contracts that guard
-/// unsafe input. Kept in the executable so `blindy --self-test` validates the build
+/// unsafe input. Kept in the executable so `blindly4 --self-test` validates the build
 /// anywhere it can run, with no test framework and no Accessibility permission.
 enum SelfTest {
     private struct Node {
@@ -96,7 +96,7 @@ enum SelfTest {
         }
 
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("blindy-self-test-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("blindly4-self-test-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let pidOne = Int(ProcessInfo.processInfo.processIdentifier)
@@ -157,7 +157,7 @@ enum SelfTest {
         }
 
         let fullDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("blindy-self-test-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("blindly4-self-test-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: fullDirectory) }
         let fullLogger = SessionLogger(
             enabled: true,
@@ -181,7 +181,7 @@ enum SelfTest {
         }
 
         let suppressedDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("blindy-self-test-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("blindly4-self-test-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: suppressedDirectory) }
         let suppressed = SessionLogger(
             enabled: true,

@@ -2,8 +2,8 @@
 import PackageDescription
 
 let package = Package(
-    name: "blindy",
+    name: "blindly4",
     platforms: [.macOS(.v13)],
-    products: [.executable(name: "blindy", targets: ["axvo"])],
-    targets: [.executableTarget(name: "axvo")]
+    products: [.executable(name: "blindly4", targets: ["blindly4"])],
+    targets: [.executableTarget(name: "blindly4")]
 )

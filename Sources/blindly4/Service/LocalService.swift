@@ -6,7 +6,7 @@ private struct ServiceRequest: Codable {
 }
 
 private func socketPath() -> String {
-    "\(NSTemporaryDirectory())blindy-\(getuid()).sock"
+    "\(NSTemporaryDirectory())blindly4-\(getuid()).sock"
 }
 
 private func withUnixAddress<T>(_ path: String, _ body: (UnsafePointer<sockaddr>, socklen_t) -> T) -> T? {

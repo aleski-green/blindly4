@@ -43,7 +43,7 @@ struct Command: Sendable {
     }
 
     var usageLine: String {
-        arguments.isEmpty ? "blindy \(name)" : "blindy \(name) \(arguments)"
+        arguments.isEmpty ? "blindly4 \(name)" : "blindly4 \(name) \(arguments)"
     }
 
     var metadata: JSON {
