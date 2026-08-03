@@ -99,26 +99,85 @@ enum SelfTest {
             .appendingPathComponent("blindy-self-test-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
-        let logger = SessionLogger(enabled: true, logDirectory: directory, startedAt: startedAt)
-        logger.log(
-            arguments: ["type", "--text", "secret"],
-            response: response,
-            elapsedMilliseconds: 12.5
+        let pidOne = Int(ProcessInfo.processInfo.processIdentifier)
+        let pidTwo = pidOne + 1
+        let compactLogger = SessionLogger(
+            enabled: true,
+            mode: .treePaths,
+            logDirectory: directory,
+            startedAt: startedAt
         )
-        logger.finish(reason: "self_test")
+        compactLogger.log(
+            arguments: ["show", "--pid", "\(pidOne)"],
+            response: ExecutionResponse(stdout: "visible tree secret", stderr: "", status: 0),
+            elapsedMilliseconds: 1
+        )
+        compactLogger.log(
+            arguments: ["paste", "--pid", "\(pidOne)", "--target-path", "0.3", "--text", "secret"],
+            response: response,
+            elapsedMilliseconds: 2
+        )
+        compactLogger.log(
+            arguments: ["find", "--pid", "\(pidTwo)", "--title", "private label"],
+            response: ExecutionResponse(stdout: "{\"matches\":[]}", stderr: "", status: 0),
+            elapsedMilliseconds: 3
+        )
+        compactLogger.log(
+            arguments: ["press", "--pid", "\(pidOne)", "--path", "0.4"],
+            response: response,
+            elapsedMilliseconds: 4
+        )
+        compactLogger.finish(reason: "self_test")
 
         let url = directory.appendingPathComponent(filename)
         guard let text = try? String(contentsOf: url, encoding: .utf8) else {
             return "session logger did not create its NDJSON file"
         }
         let lines = text.split(separator: "\n")
-        guard lines.count == 3,
-              let command = try? JSONSerialization.jsonObject(
-                with: Data(lines[1].utf8)
-              ) as? JSON,
-              command["event"] as? String == "command",
-              command["args"] as? [String] == ["--text", "secret"] else {
-            return "session logger did not write start, command, and end NDJSON events"
+        guard lines.count == 6,
+              let start = decodedEvent(from: lines[0]),
+              let firstSnapshot = decodedEvent(from: lines[1]),
+              let paste = decodedEvent(from: lines[2]),
+              let secondSnapshot = decodedEvent(from: lines[3]),
+              let press = decodedEvent(from: lines[4]),
+              start["mode"] as? String == "tree_paths",
+              firstSnapshot["event"] as? String == "snapshot",
+              firstSnapshot["snapshotId"] as? String == "s-1",
+              firstSnapshot["snapshot"] as? String == "visible tree secret",
+              secondSnapshot["snapshotId"] as? String == "s-2",
+              paste["event"] as? String == "command",
+              paste["path"] as? String == "0.3",
+              paste["snapshotId"] as? String == "s-1",
+              press["snapshotId"] as? String == "s-1",
+              paste["args"] == nil,
+              paste["stdout"] == nil,
+              paste["stderr"] == nil,
+              !text.contains("\"--text\"") else {
+            return "tree-path logging did not keep snapshots and commands compact"
+        }
+
+        let fullDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blindy-self-test-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: fullDirectory) }
+        let fullLogger = SessionLogger(
+            enabled: true,
+            mode: .full,
+            logDirectory: fullDirectory,
+            startedAt: startedAt
+        )
+        fullLogger.log(
+            arguments: ["type", "--text", "secret"],
+            response: response,
+            elapsedMilliseconds: 12.5
+        )
+        fullLogger.finish(reason: "self_test")
+        let fullURL = fullDirectory.appendingPathComponent(filename)
+        guard let fullText = try? String(contentsOf: fullURL, encoding: .utf8),
+              let fullCommand = fullText.split(separator: "\n").dropFirst().first.flatMap(decodedEvent),
+              fullCommand["event"] as? String == "command",
+              fullCommand["args"] as? [String] == ["--text", "secret"],
+              (fullCommand["stdout"] as? JSON)?["characters"] as? Int == 6 else {
+            return "full logging did not preserve the legacy command event"
         }
 
         let suppressedDirectory = FileManager.default.temporaryDirectory
@@ -139,6 +198,10 @@ enum SelfTest {
             return "--no-log created an empty session log"
         }
         return nil
+    }
+
+    private static func decodedEvent(from line: Substring) -> JSON? {
+        try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? JSON
     }
 
     /// The schema is how an agent discovers what exists, so it has to stay complete.
