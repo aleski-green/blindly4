@@ -24,7 +24,7 @@ let inputCommands = CommandGroup(title: "Desktop input", commands: [
         let text = try invocation.value("text")
         let targetPath = invocation.optional("target-path")
         if targetPath != nil, invocation.optional("pid") == nil {
-            throw CLIError.usage("paste --target-path requires --pid so Blindly can refuse cross-app input")
+            throw CLIError.usage("paste --target-path requires --pid so blindly4 can refuse cross-app input")
         }
         let pid = try requireInputTarget(pidText: invocation.optional("pid"))
         var verified = false

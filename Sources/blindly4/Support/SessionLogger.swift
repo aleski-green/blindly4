@@ -9,7 +9,7 @@ final class SessionLogger {
         case full
 
         static var fromEnvironment: Mode {
-            ProcessInfo.processInfo.environment["BLINDY_LOG_MODE"] == "full" ? .full : .treePaths
+            ProcessInfo.processInfo.environment["BLINDLY4_LOG_MODE"] == "full" ? .full : .treePaths
         }
 
         var name: String {
@@ -35,7 +35,7 @@ final class SessionLogger {
     private var latestSnapshotIDByPID: [Int: String] = [:]
 
     init(
-        enabled: Bool = ProcessInfo.processInfo.environment["BLINDY_NO_LOG"] != "1",
+        enabled: Bool = ProcessInfo.processInfo.environment["BLINDLY4_NO_LOG"] != "1",
         mode: Mode = .fromEnvironment,
         logDirectory: URL? = nil,
         startedAt: Date = Date()
@@ -238,7 +238,7 @@ final class SessionLogger {
     }
 
     private static func defaultLogDirectory() -> URL {
-        if let override = ProcessInfo.processInfo.environment["BLINDY_LOG_DIR"],
+        if let override = ProcessInfo.processInfo.environment["BLINDLY4_LOG_DIR"],
            !override.isEmpty {
             return URL(fileURLWithPath: override, isDirectory: true)
         }

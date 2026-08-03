@@ -272,6 +272,6 @@ func performAction(_ element: AXUIElement, _ name: String) throws {
 
 func requireAccessibility() throws {
     guard AXIsProcessTrusted() else {
-        throw CLIError.accessibility("Accessibility access is not enabled. Run `blindy request-permission`, then enable your terminal in System Settings > Privacy & Security > Accessibility.")
+        throw CLIError.accessibility("Accessibility access is not enabled. Run `blindly4 request-permission`, then enable your terminal in System Settings > Privacy & Security > Accessibility.")
     }
 }

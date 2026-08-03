@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Blindy is a macOS-only Swift CLI for reading and operating the Accessibility (AX)
+blindly4 is a macOS-only Swift CLI for reading and operating the Accessibility (AX)
 tree. It does not control VoiceOver. Most commands return JSON so programs and coding
 agents can consume them safely.
 
@@ -12,8 +12,8 @@ Run these commands from the repository root:
 
 ```sh
 swift build
-swift run blindy --self-test
-swift run blindy schema
+swift run blindly4 --self-test
+swift run blindly4 schema
 ```
 
 The package requires macOS 13 or newer and Swift 6. Commands that inspect or operate
@@ -23,19 +23,30 @@ the AX tree also require Accessibility permission for the terminal or host proce
 `--self-test` is the only automated gate, and it depends on nothing beyond the
 package itself, so it runs anywhere the executable builds. Add coverage for new
 parsing, traversal, normalization, or safety preconditions to
-`Sources/axvo/Support/SelfTest.swift`.
+`Sources/blindly4/Support/SelfTest.swift`.
+
+## How to run
+
+Clone the repository into your coding agent's working folder. Prompt it:
+
+```text
+Using blindly4 only do:
+open app {APP}, open section/chat with {WHAT}, do {THIS} and {THAT}
+```
+
+If automation is needed, do it every `{T}` minutes/hours.
 
 ## Architecture
 
-- `Sources/axvo/main.swift`: process entry point and local-service dispatch
-- `Sources/axvo/CLI/`: command registry, metadata, help, and command handlers
-- `Sources/axvo/Accessibility/`: AX reads, tree traversal, paths, and search caching
-- `Sources/axvo/Input/`: application activation and synthetic keyboard/mouse input
-- `Sources/axvo/Service/`: per-user, memory-only Unix socket service
-- `Sources/axvo/Support/`: parsing, errors, output, profiling, and self-tests
+- `Sources/blindly4/main.swift`: process entry point and local-service dispatch
+- `Sources/blindly4/CLI/`: command registry, metadata, help, and command handlers
+- `Sources/blindly4/Accessibility/`: AX reads, tree traversal, paths, and search caching
+- `Sources/blindly4/Input/`: application activation and synthetic keyboard/mouse input
+- `Sources/blindly4/Service/`: per-user, memory-only Unix socket service
+- `Sources/blindly4/Support/`: parsing, errors, output, profiling, and self-tests
 
 Commands are declared once in a `CommandGroup`. Keep their summary, risk,
-accessibility requirement, usage, and implementation together. `blindy schema`
+accessibility requirement, usage, and implementation together. `blindly4 schema`
 exposes this metadata to agents.
 
 ## Safety invariants
@@ -55,9 +66,9 @@ Treat desktop input as untrusted and potentially destructive.
   are unredacted and may contain AX metadata, search text, text values, URLs, and other
   visible private text; later command events contain only metadata and AX paths. They are
   written to `.logs/` at the package root and must remain gitignored. Set
-  `BLINDY_LOG_MODE=full` only when the legacy full plaintext format is required.
-- Use `--no-log` to omit one command from the session log, or start Blindly with
-  `BLINDY_NO_LOG=1` to disable logging for the whole service process.
+  `BLINDLY4_LOG_MODE=full` only when the legacy full plaintext format is required.
+- Use `--no-log` to omit one command from the session log, or start blindly4 with
+  `BLINDLY4_NO_LOG=1` to disable logging for the whole service process.
 - Search caches and named AX snapshots remain memory-only. They are distinct from
   audit discovery snapshots written by the session logger.
 

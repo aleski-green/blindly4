@@ -1,7 +1,7 @@
 import ApplicationServices
 import Foundation
 
-/// One parsed command line: `blindy press --path 0.2 --pid 123`.
+/// One parsed command line: `blindly4 press --path 0.2 --pid 123`.
 struct Invocation {
     let command: String
     let options: [String: String]

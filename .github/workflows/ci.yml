@@ -15,11 +15,11 @@ jobs:
       - name: Build
         run: swift build
       - name: Dependency-free self-test
-        run: swift run blindy --self-test
+        run: swift run blindly4 --self-test
       - name: Machine-readable schema
-        run: swift run blindy schema
+        run: swift run blindly4 schema
       - name: Package test binary
         uses: actions/upload-artifact@v4
         with:
-          name: blindy-${{ runner.arch }}
-          path: .build/debug/blindy
+          name: blindly4-${{ runner.arch }}
+          path: .build/debug/blindly4
