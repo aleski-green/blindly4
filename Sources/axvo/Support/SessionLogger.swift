@@ -1,22 +1,47 @@
 import AppKit
 import Foundation
 
-/// Best-effort, full-fidelity command logging for one local-service or direct session.
+/// Best-effort audit logging for one local-service or direct session.
 /// The file is opened lazily so `--no-log` commands do not create empty log files.
 final class SessionLogger {
+    enum Mode {
+        case treePaths
+        case full
+
+        static var fromEnvironment: Mode {
+            ProcessInfo.processInfo.environment["BLINDY_LOG_MODE"] == "full" ? .full : .treePaths
+        }
+
+        var name: String {
+            switch self {
+            case .treePaths: return "tree_paths"
+            case .full: return "full"
+            }
+        }
+    }
+
+    private static let discoveryCommands: Set<String> = [
+        "show", "tree", "find", "inspect", "actions", "focused"
+    ]
+
     private let enabled: Bool
+    private let mode: Mode
     private let startedAt: Date
     private let sessionID: String
     private let logDirectory: URL
     private var file: FileHandle?
     private var finished = false
+    private var nextSnapshotNumber = 1
+    private var latestSnapshotIDByPID: [Int: String] = [:]
 
     init(
         enabled: Bool = ProcessInfo.processInfo.environment["BLINDY_NO_LOG"] != "1",
+        mode: Mode = .fromEnvironment,
         logDirectory: URL? = nil,
         startedAt: Date = Date()
     ) {
         self.enabled = enabled
+        self.mode = mode
         self.startedAt = startedAt
         self.sessionID = UUID().uuidString
         self.logDirectory = logDirectory ?? Self.defaultLogDirectory()
@@ -27,16 +52,28 @@ final class SessionLogger {
         guard ensureOpen() else { return }
 
         let commandArguments = arguments.filter { $0 != "--no-log" }
-        var event = Self.commandEvent(
-            arguments: commandArguments,
-            response: response,
-            elapsedMilliseconds: elapsedMilliseconds,
-            at: Date()
-        )
-        event["session"] = sessionID
-
         let metadata = Self.targetMetadata(arguments: commandArguments)
-        event.merge(metadata) { _, new in new }
+        let event: JSON
+        switch mode {
+        case .full:
+            var fullEvent = Self.commandEvent(
+                arguments: commandArguments,
+                response: response,
+                elapsedMilliseconds: elapsedMilliseconds,
+                at: Date()
+            )
+            fullEvent["session"] = sessionID
+            fullEvent.merge(metadata) { _, new in new }
+            event = fullEvent
+        case .treePaths:
+            event = treePathsEvent(
+                commandArguments: commandArguments,
+                response: response,
+                elapsedMilliseconds: elapsedMilliseconds,
+                metadata: metadata,
+                at: Date()
+            )
+        }
         write(event)
     }
 
@@ -105,6 +142,9 @@ final class SessionLogger {
             event["event"] = "session.start"
             event["session"] = sessionID
             event["servicePid"] = Int(ProcessInfo.processInfo.processIdentifier)
+            if mode == .treePaths {
+                event["mode"] = mode.name
+            }
             write(event)
             return true
         } catch {
@@ -134,6 +174,38 @@ final class SessionLogger {
         guard !text.isEmpty else { return NSNull() }
         let data = Data(text.utf8)
         return (try? JSONSerialization.jsonObject(with: data)) ?? text
+    }
+
+    private func treePathsEvent(
+        commandArguments: [String],
+        response: ExecutionResponse,
+        elapsedMilliseconds: Double,
+        metadata: JSON,
+        at date: Date
+    ) -> JSON {
+        let command = commandArguments.first ?? ""
+        var event = Self.baseEvent(at: date)
+        event["cmd"] = command
+        event["status"] = Int(response.status)
+        event["ms"] = elapsedMilliseconds
+        event["session"] = sessionID
+        event.merge(metadata) { _, new in new }
+
+        if Self.discoveryCommands.contains(command) {
+            let snapshotID = "s-\(nextSnapshotNumber)"
+            nextSnapshotNumber += 1
+            if let pid = metadata["pid"] as? Int {
+                latestSnapshotIDByPID[pid] = snapshotID
+            }
+            event["event"] = "snapshot"
+            event["snapshotId"] = snapshotID
+            event["snapshot"] = Self.decodedOutput(response.stdout)
+        } else {
+            event["event"] = "command"
+            let pid = metadata["pid"] as? Int
+            event["snapshotId"] = pid.flatMap { latestSnapshotIDByPID[$0] } ?? NSNull()
+        }
+        return event
     }
 
     private static func targetMetadata(arguments: [String]) -> JSON {
