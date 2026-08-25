@@ -65,6 +65,39 @@ enum SelfTest {
         guard press?.risk == .externalCommit, press?.optionNames.contains("require-selected") == true else {
             return "command metadata lost the risk classification or its declared options"
         }
+        let scroll = CommandRegistry.command(named: "scroll")
+        let scrollTo = CommandRegistry.command(named: "scroll-to")
+        guard scroll?.risk == .uiMutation,
+              scroll?.optionNames.isSuperset(of: ["direction", "amount", "pid"]) == true,
+              scrollTo?.risk == .uiMutation,
+              scrollTo?.optionNames.isSuperset(of: ["path", "pid"]) == true else {
+            return "scroll command metadata or risk classification is incorrect"
+        }
+        guard (try? ScrollDirection(cliValue: "UP")) == .up,
+              (try? ScrollDirection(cliValue: "right")) == .right else {
+            return "scroll direction normalization is incorrect"
+        }
+        do {
+            _ = try ScrollDirection(cliValue: "diagonal")
+            return "an unsupported scroll direction was accepted"
+        } catch CLIError.usage {
+            // Expected: scrolling is limited to the four named directions.
+        } catch {
+            return "an unsupported scroll direction did not produce a usage error"
+        }
+        do {
+            let invocation = try Invocation(
+                command: "scroll",
+                arguments: ["--direction", "down", "--amount", "0"],
+                allowedOptions: scroll?.optionNames
+            )
+            _ = try invocation.integer("amount", default: 3, minimum: 1)
+            return "a zero scroll amount was accepted"
+        } catch CLIError.usage {
+            // Expected: a scroll event always has a positive line count.
+        } catch {
+            return "a zero scroll amount did not produce a usage error"
+        }
         if let failure = checkSessionLogging() { return failure }
         if let failure = checkSchemaDescribesEveryCommand() { return failure }
         return nil

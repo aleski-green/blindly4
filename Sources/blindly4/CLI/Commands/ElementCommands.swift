@@ -2,6 +2,7 @@ import ApplicationServices
 import Foundation
 
 private let pathArguments = "--path INDEX[.INDEX...] [--pid PID]"
+private let scrollToVisibleAction = "AXScrollToVisible"
 
 /// Commands that write a string attribute share everything but the attribute name.
 private func textAttributeCommand(_ name: String, attribute: String) -> Command {
@@ -41,6 +42,15 @@ let elementCommands = CommandGroup(title: "Elements", commands: [
         }
         try performAction(target.element, kAXShowMenuAction)
         printJSON(["path": target.path, "action": kAXShowMenuAction, "ok": true], to: context)
+    },
+
+    Command("scroll-to", pathArguments, summary: "Scroll an accessibility element into view when supported.", risk: .uiMutation) { invocation, context in
+        let target = try invocation.element(profile: context.profile)
+        guard actions(of: target.element, profile: context.profile).contains(scrollToVisibleAction) else {
+            throw CLIError.usage("scroll-to target does not support \(scrollToVisibleAction)")
+        }
+        try performAction(target.element, scrollToVisibleAction)
+        printJSON(["path": target.path, "action": scrollToVisibleAction, "ok": true], to: context)
     },
 
     Command("press", "\(pathArguments) [--expect-description TEXT] [--require-selected] [--require-value-path PATH --require-value TEXT]", summary: "Perform AXPress; this may trigger an irreversible external action.", risk: .externalCommit) { invocation, context in

@@ -44,6 +44,7 @@ blindly4 focused
 blindly4 inspect --path 0.2
 blindly4 actions --path 0.2
 blindly4 show-menu --path 0.2
+blindly4 scroll-to --path 0.2
 blindly4 press --path 0.2
 blindly4 set-value --path 0.2 --value 'new text'
 ```
@@ -80,6 +81,16 @@ blindly4 click --x 600 --y 900
 blindly4 type --text 'Hello from blindly4'
 blindly4 key --key return
 ```
+
+When a web view does not expose scrollable elements in its AX tree, send a bounded
+line-based scroll event to the verified foreground app instead:
+
+```sh
+blindly4 scroll --pid 14476 --direction down --amount 5
+```
+
+Use `scroll-to --path PATH` when the target element advertises the `AXScrollToVisible`
+action; it brings that exact accessible element into view without relying on coordinates.
 
 `key --key return` activates the focused control. In a Slack composer, that sends the message, so use it only when the final message is correct.
 
@@ -262,7 +273,7 @@ the app, window, or target has changed. Add `--profile` to a command to inspect 
 time, accessibility reads, visited nodes, cache hits, and paste wait time. Prefix a
 command with `--no-service` to bypass the service for diagnostics.
 
-For system-wide input commands (`click`, `type`, `paste`, and `key`), pass `--pid` to
+For system-wide input commands (`click`, `type`, `paste`, `scroll`, and `key`), pass `--pid` to
 make Blindly activate and verify the intended foreground application before it emits the
 event. For external messages, also pass `paste --target-path` and use `press` with
 `--require-value-path` / `--require-value`; a PID guard alone cannot prove that a global
