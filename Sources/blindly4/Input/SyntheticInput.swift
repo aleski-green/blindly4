@@ -17,6 +17,17 @@ private let modifierFlags: [String: CGEventFlags] = [
     "control": .maskControl, "ctrl": .maskControl
 ]
 
+enum ScrollDirection: String, CaseIterable {
+    case up, down, left, right
+
+    init(cliValue: String) throws {
+        guard let direction = Self(rawValue: cliValue.lowercased()) else {
+            throw CLIError.usage("Unsupported --direction \(cliValue). Use up, down, left, or right.")
+        }
+        self = direction
+    }
+}
+
 private func eventSource() throws -> CGEventSource {
     guard let source = CGEventSource(stateID: .hidSystemState) else {
         throw CLIError.accessibility("Could not create a HID event source")
@@ -33,6 +44,43 @@ func postMouseClick(x: Double, y: Double) throws {
     }
     down.post(tap: .cghidEventTap)
     up.post(tap: .cghidEventTap)
+}
+
+/// Posts a line-based scroll-wheel event to the current foreground application.
+/// Positive wheel deltas follow Core Graphics' up/left convention.
+func postScroll(direction: ScrollDirection, amount: Int) throws {
+    guard amount <= Int(Int32.max) else {
+        throw CLIError.usage("--amount is too large")
+    }
+    let delta = Int32(amount)
+    let vertical: Int32
+    let horizontal: Int32
+    switch direction {
+    case .up:
+        vertical = delta
+        horizontal = 0
+    case .down:
+        vertical = -delta
+        horizontal = 0
+    case .left:
+        vertical = 0
+        horizontal = delta
+    case .right:
+        vertical = 0
+        horizontal = -delta
+    }
+    let source = try eventSource()
+    guard let event = CGEvent(
+        scrollWheelEvent2Source: source,
+        units: .line,
+        wheelCount: 2,
+        wheel1: vertical,
+        wheel2: horizontal,
+        wheel3: 0
+    ) else {
+        throw CLIError.accessibility("Could not create a scroll event")
+    }
+    event.post(tap: .cghidEventTap)
 }
 
 func postText(_ text: String) throws {

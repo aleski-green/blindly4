@@ -12,9 +12,9 @@ func usage() -> String {
 
     The default target is the frontmost application. Paths index AXChildren, starting at 0.
     Use `show` to see readable paths, `find` to locate an element by name, and `press`
-    to activate a button or tab. `activate`, `click`, `type`, and `key` directly
+    to activate a button or tab. `activate`, `click`, `type`, `scroll`, and `key` directly
     control the desktop UI, including app composers that expose no writable AX field.
-    Pass `--pid` to click, type, paste, or key to verify that exact app is frontmost
+    Pass `--pid` to click, type, paste, scroll, or key to verify that exact app is frontmost
     before blindly4 injects a system-wide input event.
 
     Add `--profile` to any command for timing, AX-read, and cache counters.

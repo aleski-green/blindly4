@@ -63,6 +63,16 @@ let inputCommands = CommandGroup(title: "Desktop input", commands: [
         printJSON(result, to: context)
     },
 
+    Command("scroll", "--direction up|down|left|right [--amount LINES] [--pid PID]", summary: "Inject a line-based system-wide scroll event.", risk: .uiMutation) { invocation, context in
+        let direction = try ScrollDirection(cliValue: invocation.value("direction"))
+        let amount = try invocation.integer("amount", default: 3, minimum: 1)
+        let pid = try requireInputTarget(pidText: invocation.optional("pid"))
+        try postScroll(direction: direction, amount: amount)
+        var result: JSON = ["direction": direction.rawValue, "amount": amount, "ok": true]
+        if let pid { result["pid"] = pid }
+        printJSON(result, to: context)
+    },
+
     Command("key", "--key return|tab|escape|space|delete|up|down|left|right|command+k [--pid PID]", summary: "Inject a system-wide key; Return may submit external data.", risk: .externalCommit) { invocation, context in
         let key = try invocation.value("key")
         let pid = try requireInputTarget(pidText: invocation.optional("pid"))
