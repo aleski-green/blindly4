@@ -43,14 +43,35 @@ enum CommandRegistry {
     static func execute(
         _ rawArguments: [String],
         session: AccessibilitySession = AccessibilitySession(),
-        logger: SessionLogger? = nil
+        logger: SessionLogger? = nil,
+        workflowLeases: WorkflowLeaseCoordinator? = nil
     ) -> ExecutionResponse {
         let startedAt = Date()
         let profileEnabled = rawArguments.contains("--profile")
-        let arguments = rawArguments.filter { $0 != "--profile" && $0 != "--no-log" }
-        let context = ExecutionContext(session: session, profileEnabled: profileEnabled)
+        let context = ExecutionContext(
+            session: session,
+            profileEnabled: profileEnabled,
+            workflowLeases: workflowLeases
+        )
+        var loggingArguments = rawArguments
+        var workflowMetadata: JSON?
         let status: Int32
         do {
+            let leaseArguments = try WorkflowLeaseArguments(rawArguments)
+            loggingArguments = leaseArguments.loggingArguments
+            if let workflowLeases, leaseArguments.commandArguments.first != "lease" {
+                switch workflowLeases.authorize(token: leaseArguments.token) {
+                case .granted(let lease):
+                    workflowMetadata = lease?.metadata()
+                case .busy(let retryAfterMilliseconds):
+                    throw CLIError.workflowBusy(retryAfterMilliseconds: retryAfterMilliseconds)
+                case .invalidToken:
+                    throw CLIError.workflowLeaseInvalid
+                }
+            } else if workflowLeases == nil, leaseArguments.token != nil {
+                throw CLIError.usage("--lease requires the local Blindly service; remove --no-service")
+            }
+            let arguments = leaseArguments.commandArguments.filter { $0 != "--profile" && $0 != "--no-log" }
             try run(arguments, context: context)
             status = 0
         } catch {
@@ -59,11 +80,35 @@ enum CommandRegistry {
         if profileEnabled { context.writeStderr(context.profile.render()) }
         let response = context.response(status: status)
         logger?.log(
-            arguments: rawArguments,
-            response: response,
-            elapsedMilliseconds: Date().timeIntervalSince(startedAt) * 1_000
+            arguments: redactLeaseCommandToken(in: loggingArguments),
+            response: redactLeaseResponse(response, command: loggingArguments.first),
+            elapsedMilliseconds: Date().timeIntervalSince(startedAt) * 1_000,
+            workflow: workflowMetadata
         )
         return response
+    }
+
+    private static func redactLeaseCommandToken(in arguments: [String]) -> [String] {
+        guard arguments.first == "lease" else { return arguments }
+        var redacted = arguments
+        if let tokenIndex = redacted.firstIndex(of: "--token"), redacted.indices.contains(tokenIndex + 1) {
+            redacted[tokenIndex + 1] = "<redacted>"
+        }
+        return redacted
+    }
+
+    private static func redactLeaseResponse(_ response: ExecutionResponse, command: String?) -> ExecutionResponse {
+        guard command == "lease",
+              let data = response.stdout.data(using: .utf8),
+              var object = try? JSONSerialization.jsonObject(with: data) as? JSON else {
+            return response
+        }
+        object.removeValue(forKey: "token")
+        guard let redactedData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+              let stdout = String(data: redactedData, encoding: .utf8) else {
+            return response
+        }
+        return ExecutionResponse(stdout: stdout + "\n", stderr: response.stderr, status: response.status)
     }
 
     /// `help` and `-h` are ordinary text that a caller may legitimately pass as an

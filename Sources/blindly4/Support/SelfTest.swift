@@ -62,8 +62,14 @@ enum SelfTest {
             return "a misspelled option did not produce a usage error"
         }
         let press = CommandRegistry.command(named: "press")
+        let lease = CommandRegistry.command(named: "lease")
         guard press?.risk == .externalCommit, press?.optionNames.contains("require-selected") == true else {
             return "command metadata lost the risk classification or its declared options"
+        }
+        guard lease?.risk == .localState,
+              lease?.requiresAccessibility == false,
+              lease?.optionNames.isSuperset(of: ["owner", "token", "ttl"]) == true else {
+            return "workflow lease command metadata is incorrect"
         }
         let scroll = CommandRegistry.command(named: "scroll")
         let scrollTo = CommandRegistry.command(named: "scroll-to")
@@ -98,8 +104,84 @@ enum SelfTest {
         } catch {
             return "a zero scroll amount did not produce a usage error"
         }
+        if let failure = checkWorkflowLeases() { return failure }
         if let failure = checkSessionLogging() { return failure }
         if let failure = checkSchemaDescribesEveryCommand() { return failure }
+        return nil
+    }
+
+    private static func checkWorkflowLeases() -> String? {
+        let leases = WorkflowLeaseCoordinator()
+        let startedAt = Date(timeIntervalSince1970: 1_750_000_000)
+        guard case .success(let lease) = leases.acquire(owner: "agent-a", ttlSeconds: 30, now: startedAt) else {
+            return "workflow lease could not be acquired"
+        }
+        guard case .busy(let retryAfterMilliseconds) = leases.authorize(token: nil, now: startedAt),
+              retryAfterMilliseconds == 30_000 else {
+            return "a held workflow lease did not block a read without its token"
+        }
+        guard case .granted(let authorized?) = leases.authorize(token: lease.token, now: startedAt),
+              authorized.id == lease.id,
+              authorized.owner == "agent-a" else {
+            return "the workflow lease token did not authorize its owner"
+        }
+        guard case .busy = leases.release(token: "wl_wrong", now: startedAt) else {
+            return "an invalid workflow lease token released another workflow"
+        }
+        guard case .granted(let released?) = leases.release(token: lease.token, now: startedAt),
+              released.id == lease.id,
+              case .granted(nil) = leases.authorize(token: nil, now: startedAt) else {
+            return "a workflow lease did not release cleanly"
+        }
+        let expiringLeases = WorkflowLeaseCoordinator()
+        guard case .success(let expiringLease) = expiringLeases.acquire(owner: "agent-b", ttlSeconds: 1, now: startedAt),
+              case .invalidToken = expiringLeases.authorize(token: expiringLease.token, now: startedAt.addingTimeInterval(2)) else {
+            return "an expired workflow lease token was accepted"
+        }
+        do {
+            let parsed = try WorkflowLeaseArguments(["find", "--title", "Messages", "--lease", "wl_secret"])
+            guard parsed.commandArguments == ["find", "--title", "Messages"],
+                  parsed.token == "wl_secret",
+                  parsed.loggingArguments == ["find", "--title", "Messages", "--lease", "<redacted>"] else {
+                return "workflow lease arguments did not separate or redact the token"
+            }
+        } catch {
+            return "workflow lease arguments failed to parse"
+        }
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("blindly4-self-test-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let logger = SessionLogger(enabled: true, mode: .full, logDirectory: directory, startedAt: startedAt)
+        let serviceLeases = WorkflowLeaseCoordinator()
+        let acquired = CommandRegistry.execute(
+            ["lease", "acquire", "--owner", "self-test", "--ttl", "30"],
+            logger: logger,
+            workflowLeases: serviceLeases
+        )
+        guard acquired.status == 0,
+              let acquireData = acquired.stdout.data(using: .utf8),
+              let acquireJSON = try? JSONSerialization.jsonObject(with: acquireData) as? JSON,
+              let token = acquireJSON["token"] as? String else {
+            return "lease acquire did not return a workflow token"
+        }
+        let authorizedRead = CommandRegistry.execute(
+            ["apps", "--lease", token],
+            logger: logger,
+            workflowLeases: serviceLeases
+        )
+        let blockedRead = CommandRegistry.execute(["apps"], logger: logger, workflowLeases: serviceLeases)
+        logger.finish(reason: "self_test")
+        guard authorizedRead.status == 0, blockedRead.status == 75 else {
+            return "workflow leases did not apply consistently to read-only commands"
+        }
+        let logURL = directory.appendingPathComponent(SessionLogger.filename(for: startedAt))
+        guard let logText = try? String(contentsOf: logURL, encoding: .utf8),
+              !logText.contains(token),
+              logText.contains("workflowId"),
+              logText.contains("workflowOwner") else {
+            return "workflow logs leaked a token or omitted workflow metadata"
+        }
         return nil
     }
 

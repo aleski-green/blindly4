@@ -1,6 +1,77 @@
 import ApplicationServices
 
 let sessionCommands = CommandGroup(title: "Session", commands: [
+    Command("lease", "<acquire|renew|release|status> [--owner OWNER] [--token TOKEN] [--ttl SECONDS]", summary: "Coordinate an exclusive, service-wide workflow lease.", risk: .localState, requiresAccessibility: false) { invocation, context in
+        guard let leases = context.workflowLeases else {
+            throw CLIError.usage("lease requires the local Blindly service; remove --no-service")
+        }
+        guard invocation.positionals.count == 1 else {
+            throw CLIError.usage("lease requires one action: acquire, renew, release, or status")
+        }
+        switch invocation.positionals[0] {
+        case "acquire":
+            let owner = try invocation.value("owner")
+            guard !owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw CLIError.usage("--owner must not be empty")
+            }
+            let ttl = try invocation.integer("ttl", default: 60, minimum: 1)
+            guard ttl <= 3_600 else { throw CLIError.usage("--ttl must be <= 3600") }
+            switch leases.acquire(owner: owner, ttlSeconds: ttl) {
+            case .success(let lease):
+                printJSON([
+                    "expiresInSeconds": ttl,
+                    "owner": lease.owner,
+                    "token": lease.token,
+                    "workflowId": lease.id
+                ], to: context)
+            case .failure(.busy(let retryAfterMilliseconds)):
+                throw CLIError.workflowBusy(retryAfterMilliseconds: retryAfterMilliseconds)
+            case .failure(.granted), .failure(.invalidToken):
+                throw CLIError.workflowLeaseInvalid
+            }
+        case "renew":
+            let token = try invocation.value("token")
+            let ttl = try invocation.integer("ttl", default: 60, minimum: 1)
+            guard ttl <= 3_600 else { throw CLIError.usage("--ttl must be <= 3600") }
+            switch leases.renew(token: token, ttlSeconds: ttl) {
+            case .success(let lease):
+                printJSON([
+                    "expiresInSeconds": ttl,
+                    "owner": lease.owner,
+                    "workflowId": lease.id
+                ], to: context)
+            case .failure(.busy(let retryAfterMilliseconds)):
+                throw CLIError.workflowBusy(retryAfterMilliseconds: retryAfterMilliseconds)
+            case .failure(.granted), .failure(.invalidToken):
+                throw CLIError.workflowLeaseInvalid
+            }
+        case "release":
+            let token = try invocation.value("token")
+            switch leases.release(token: token) {
+            case .granted(let lease?):
+                printJSON(["owner": lease.owner, "released": true, "workflowId": lease.id], to: context)
+            case .busy(let retryAfterMilliseconds):
+                throw CLIError.workflowBusy(retryAfterMilliseconds: retryAfterMilliseconds)
+            case .granted(nil), .invalidToken:
+                throw CLIError.workflowLeaseInvalid
+            }
+        case "status":
+            if let lease = leases.status() {
+                let seconds = max(0, Int(lease.expiresAt.timeIntervalSinceNow.rounded(.up)))
+                printJSON([
+                    "expiresInSeconds": seconds,
+                    "held": true,
+                    "owner": lease.owner,
+                    "workflowId": lease.id
+                ], to: context)
+            } else {
+                printJSON(["held": false], to: context)
+            }
+        default:
+            throw CLIError.usage("Unknown lease action: \(invocation.positionals[0])")
+        }
+    },
+
     Command("request-permission", summary: "Request macOS Accessibility permission.", risk: .uiMutation, requiresAccessibility: false) { _, context in
         printJSON(requestAccessibilityPermission(), to: context)
     },

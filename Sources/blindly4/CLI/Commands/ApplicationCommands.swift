@@ -19,7 +19,13 @@ let applicationCommands = CommandGroup(title: "Applications", commands: [
     Command("schema", summary: "Print machine-readable command and safety metadata.", requiresAccessibility: false) { _, context in
         printJSON([
             "schemaVersion": 1,
-            "commands": CommandRegistry.all.map(\.metadata)
+            "commands": CommandRegistry.all.map(\.metadata),
+            "globalOptions": [
+                [
+                    "name": "--lease TOKEN",
+                    "summary": "Authorize a command while a service-wide workflow lease is active."
+                ]
+            ]
         ], to: context)
     }
 ])

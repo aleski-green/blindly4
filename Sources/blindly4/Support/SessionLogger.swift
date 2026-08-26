@@ -47,7 +47,12 @@ final class SessionLogger {
         self.logDirectory = logDirectory ?? Self.defaultLogDirectory()
     }
 
-    func log(arguments: [String], response: ExecutionResponse, elapsedMilliseconds: Double) {
+    func log(
+        arguments: [String],
+        response: ExecutionResponse,
+        elapsedMilliseconds: Double,
+        workflow: JSON? = nil
+    ) {
         guard enabled, !arguments.contains("--no-log"), !finished else { return }
         guard ensureOpen() else { return }
 
@@ -64,15 +69,18 @@ final class SessionLogger {
             )
             fullEvent["session"] = sessionID
             fullEvent.merge(metadata) { _, new in new }
+            if let workflow { fullEvent.merge(workflow) { _, new in new } }
             event = fullEvent
         case .treePaths:
-            event = treePathsEvent(
+            var compactEvent = treePathsEvent(
                 commandArguments: commandArguments,
                 response: response,
                 elapsedMilliseconds: elapsedMilliseconds,
                 metadata: metadata,
                 at: Date()
             )
+            if let workflow { compactEvent.merge(workflow) { _, new in new } }
+            event = compactEvent
         }
         write(event)
     }

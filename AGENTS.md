@@ -71,6 +71,9 @@ Treat desktop input as untrusted and potentially destructive.
   `BLINDLY4_NO_LOG=1` to disable logging for the whole service process.
 - Search caches and named AX snapshots remain memory-only. They are distinct from
   audit discovery snapshots written by the session logger.
+- For multi-command work, acquire a service-wide workflow lease and pass its token to
+  every Blindly command, including reads. Do not issue an unleased command while an
+  agent owns the desktop workflow; it returns `workflow_busy` instead of interleaving.
 
 Changes to these invariants require explicit review and focused tests.
 

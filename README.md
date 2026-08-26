@@ -69,6 +69,31 @@ Add `--no-log` to omit one command from a service log. Set `BLINDLY4_NO_LOG=1` b
 starting Blindly to disable logging for the whole service process. Set
 `BLINDLY4_LOG_DIR` to override the log directory.
 
+## Coordinating multiple agents
+
+Blindly's local service executes one command at a time. For a multi-command workflow,
+acquire a service-wide lease before the first read or UI action. While held, every other
+normal command—including read-only commands—is rejected with exit status `75` and a compact
+`workflow_busy` response. The lease is memory-only, expires automatically, and disappears
+if the service restarts. Lease tokens are never written to Blindly logs.
+
+```sh
+# The caller keeps TOKEN private. It is a short-lived workflow-session capability,
+# not a persistent credential.
+blindly4 lease acquire --owner instagram-monitor --ttl 60
+
+# Pass the returned token to every command in the workflow, including reads.
+blindly4 show --pid 12345 --depth 6 --lease TOKEN
+blindly4 find --pid 12345 --title 'Messages' --lease TOKEN
+
+# Release as soon as the workflow is complete. `renew` extends a live lease.
+blindly4 lease renew --token TOKEN --ttl 60
+blindly4 lease release --token TOKEN
+```
+
+Without an active lease, a one-shot command continues to work as before. `--no-service`
+is diagnostic-only and cannot participate in coordinated workflows.
+
 ## Sending through the desktop app
 
 Some web-based desktop apps (including Slack) expose their composer only as a web area. In that case, control the focused desktop application directly:
