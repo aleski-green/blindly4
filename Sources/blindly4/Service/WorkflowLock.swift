@@ -8,7 +8,7 @@ final class WorkflowLock {
         expire(now: now)
         guard lease == nil else { return nil }
         let token = "wf_\(UUID().uuidString.lowercased())"
-        lease = (token, now.addingTimeInterval(60))
+        lease = (token, now.addingTimeInterval(300))
         return token
     }
 

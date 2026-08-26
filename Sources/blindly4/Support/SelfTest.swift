@@ -116,9 +116,9 @@ enum SelfTest {
             return "workflow lock did not isolate and release a workflow"
         }
         guard let expiring = lock.acquire(now: now),
-              lock.allows(token: nil, now: now.addingTimeInterval(61)),
-              !lock.allows(token: expiring, now: now.addingTimeInterval(61)) else {
-            return "workflow lock did not expire after 60 seconds"
+              lock.allows(token: nil, now: now.addingTimeInterval(301)),
+              !lock.allows(token: expiring, now: now.addingTimeInterval(301)) else {
+            return "workflow lock did not expire after five minutes"
         }
         do {
             let parsed = try workflowArguments(["show", "--lease", "wf_test", "--depth", "2"])

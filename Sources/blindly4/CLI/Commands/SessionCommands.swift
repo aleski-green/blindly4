@@ -1,7 +1,7 @@
 import ApplicationServices
 
 let sessionCommands = CommandGroup(title: "Session", commands: [
-    Command("workflow", "<acquire|release>", summary: "Acquire or release the 60-second service workflow lock.", risk: .localState, requiresAccessibility: false) { invocation, context in
+    Command("workflow", "<acquire|release>", summary: "Acquire or release the five-minute service workflow lock.", risk: .localState, requiresAccessibility: false) { invocation, context in
         guard let lock = context.workflowLock, invocation.positionals.count == 1 else {
             throw CLIError.usage("workflow requires the local service and one action: acquire or release")
         }

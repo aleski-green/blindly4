@@ -71,7 +71,7 @@ starting Blindly to disable logging for the whole service process. Set
 
 ## Coordinating workflows
 
-Use `workflow acquire` to obtain a 60-second local-service lock, pass the returned token
+Use `workflow acquire` to obtain a five-minute local-service lock, pass the returned token
 as `--lease TOKEN` to every command in that workflow, then release it with
 `workflow release --lease TOKEN`. While held, other commands return `workflow_busy`.
 
