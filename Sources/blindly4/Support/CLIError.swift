@@ -3,6 +3,7 @@ import Foundation
 enum CLIError: Error {
     case usage(String)
     case accessibility(String)
+    case workflowBusy
 }
 
 /// Renders a failure and returns the exit code the top level should use.
@@ -15,6 +16,9 @@ func report(_ error: Error, showUsage: Bool, to context: ExecutionContext) -> In
     case CLIError.accessibility(let message):
         printJSON(["error": message], to: context)
         return 77
+    case CLIError.workflowBusy:
+        printJSON(["code": "workflow_busy", "error": "Another workflow owns the Blindly service"], to: context)
+        return 75
     default:
         printJSON(["error": String(describing: error)], to: context)
         return 1

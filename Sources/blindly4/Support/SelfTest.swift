@@ -98,8 +98,36 @@ enum SelfTest {
         } catch {
             return "a zero scroll amount did not produce a usage error"
         }
+        if let failure = checkWorkflowLock() { return failure }
         if let failure = checkSessionLogging() { return failure }
         if let failure = checkSchemaDescribesEveryCommand() { return failure }
+        return nil
+    }
+
+    private static func checkWorkflowLock() -> String? {
+        let lock = WorkflowLock()
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        guard let token = lock.acquire(now: now),
+              !lock.allows(token: nil, now: now),
+              lock.allows(token: token, now: now),
+              !lock.release(token: "wrong", now: now),
+              lock.release(token: token, now: now),
+              lock.allows(token: nil, now: now) else {
+            return "workflow lock did not isolate and release a workflow"
+        }
+        guard let expiring = lock.acquire(now: now),
+              lock.allows(token: nil, now: now.addingTimeInterval(61)),
+              !lock.allows(token: expiring, now: now.addingTimeInterval(61)) else {
+            return "workflow lock did not expire after 60 seconds"
+        }
+        do {
+            let parsed = try workflowArguments(["show", "--lease", "wf_test", "--depth", "2"])
+            guard parsed.command == ["show", "--depth", "2"], parsed.token == "wf_test" else {
+                return "workflow token was not removed before command parsing"
+            }
+        } catch {
+            return "workflow token parsing failed"
+        }
         return nil
     }
 

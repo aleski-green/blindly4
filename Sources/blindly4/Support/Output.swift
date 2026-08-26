@@ -11,12 +11,21 @@ struct ExecutionResponse: Codable {
 final class ExecutionContext {
     let session: AccessibilitySession
     let profile: Profile
+    let workflowLock: WorkflowLock?
+    let workflowToken: String?
     private(set) var stdout = ""
     private(set) var stderr = ""
 
-    init(session: AccessibilitySession = AccessibilitySession(), profileEnabled: Bool = false) {
+    init(
+        session: AccessibilitySession = AccessibilitySession(),
+        profileEnabled: Bool = false,
+        workflowLock: WorkflowLock? = nil,
+        workflowToken: String? = nil
+    ) {
         self.session = session
         self.profile = Profile(enabled: profileEnabled)
+        self.workflowLock = workflowLock
+        self.workflowToken = workflowToken
     }
 
     func writeStdout(_ text: String) { stdout += text }

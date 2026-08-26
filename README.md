@@ -69,6 +69,12 @@ Add `--no-log` to omit one command from a service log. Set `BLINDLY4_NO_LOG=1` b
 starting Blindly to disable logging for the whole service process. Set
 `BLINDLY4_LOG_DIR` to override the log directory.
 
+## Coordinating workflows
+
+Use `workflow acquire` to obtain a 60-second local-service lock, pass the returned token
+as `--lease TOKEN` to every command in that workflow, then release it with
+`workflow release --lease TOKEN`. While held, other commands return `workflow_busy`.
+
 ## Sending through the desktop app
 
 Some web-based desktop apps (including Slack) expose their composer only as a web area. In that case, control the focused desktop application directly:

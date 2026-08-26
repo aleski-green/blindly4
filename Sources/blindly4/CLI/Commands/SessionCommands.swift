@@ -1,6 +1,24 @@
 import ApplicationServices
 
 let sessionCommands = CommandGroup(title: "Session", commands: [
+    Command("workflow", "<acquire|release>", summary: "Acquire or release the 60-second service workflow lock.", risk: .localState, requiresAccessibility: false) { invocation, context in
+        guard let lock = context.workflowLock, invocation.positionals.count == 1 else {
+            throw CLIError.usage("workflow requires the local service and one action: acquire or release")
+        }
+        switch invocation.positionals[0] {
+        case "acquire":
+            guard let token = lock.acquire() else { throw CLIError.workflowBusy }
+            printJSON(["token": token], to: context)
+        case "release":
+            guard let token = context.workflowToken, lock.release(token: token) else {
+                throw CLIError.workflowBusy
+            }
+            printJSON(["released": true], to: context)
+        default:
+            throw CLIError.usage("workflow action must be acquire or release")
+        }
+    },
+
     Command("request-permission", summary: "Request macOS Accessibility permission.", risk: .uiMutation, requiresAccessibility: false) { _, context in
         printJSON(requestAccessibilityPermission(), to: context)
     },
