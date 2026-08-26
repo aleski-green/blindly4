@@ -10,10 +10,15 @@ let sessionCommands = CommandGroup(title: "Session", commands: [
             guard let token = lock.acquire() else { throw CLIError.workflowBusy }
             printJSON(["token": token], to: context)
         case "release":
-            guard let token = context.workflowToken, lock.release(token: token) else {
+            guard let token = context.workflowToken else { throw CLIError.workflowLeaseInvalid }
+            switch lock.release(token: token) {
+            case .allowed:
+                printJSON(["released": true], to: context)
+            case .busy:
                 throw CLIError.workflowBusy
+            case .invalid:
+                throw CLIError.workflowLeaseInvalid
             }
-            printJSON(["released": true], to: context)
         default:
             throw CLIError.usage("workflow action must be acquire or release")
         }

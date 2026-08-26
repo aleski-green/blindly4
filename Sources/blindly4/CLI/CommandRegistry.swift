@@ -59,8 +59,12 @@ enum CommandRegistry {
                 workflowLock: workflowLock,
                 workflowToken: parsed.token
             )
-            if workflowLock != nil, arguments.first != "workflow", !workflowLock!.allows(token: parsed.token) {
-                throw CLIError.workflowBusy
+            if let workflowLock, arguments.first != "workflow" {
+                switch workflowLock.authorize(token: parsed.token) {
+                case .allowed: break
+                case .busy: throw CLIError.workflowBusy
+                case .invalid: throw CLIError.workflowLeaseInvalid
+                }
             }
             try run(arguments, context: context)
             status = 0

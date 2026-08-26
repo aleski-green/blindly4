@@ -19,7 +19,8 @@ func usage() -> String {
 
     Add `--profile` to any command for timing, AX-read, and cache counters.
     For a multi-command workflow, run `workflow acquire`, pass its token as `--lease TOKEN`
-    to every command (including reads), then run `workflow release --lease TOKEN`.
+    to every command (including reads), then run `workflow release --lease TOKEN`. Valid commands
+    refresh the five-minute expiry.
     Session logs use compact AX snapshots plus path references by default. Discovery snapshots
     can contain visible private text. Set BLINDLY4_LOG_MODE=full for legacy full plaintext logs.
     Add `--no-log` to a command or set `BLINDLY4_NO_LOG=1` before starting blindly4 to disable logging.

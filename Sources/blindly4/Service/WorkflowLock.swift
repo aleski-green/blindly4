@@ -1,7 +1,14 @@
 import Foundation
 
 /// A short-lived, in-memory lock for one multi-command desktop workflow.
+/// Access is serialized by the local service's single-threaded accept loop.
 final class WorkflowLock {
+    enum Authorization {
+        case allowed
+        case busy
+        case invalid
+    }
+
     private var lease: (token: String, expiresAt: Date)?
 
     func acquire(now: Date = Date()) -> String? {
@@ -12,16 +19,19 @@ final class WorkflowLock {
         return token
     }
 
-    func release(token: String, now: Date = Date()) -> Bool {
-        expire(now: now)
-        guard lease?.token == token else { return false }
+    func release(token: String, now: Date = Date()) -> Authorization {
+        let authorization = authorize(token: token, now: now)
+        guard case .allowed = authorization else { return authorization }
         lease = nil
-        return true
+        return .allowed
     }
 
-    func allows(token: String?, now: Date = Date()) -> Bool {
+    func authorize(token: String?, now: Date = Date()) -> Authorization {
         expire(now: now)
-        return lease?.token == token || (lease == nil && token == nil)
+        guard let lease else { return token == nil ? .allowed : .invalid }
+        guard lease.token == token else { return .busy }
+        self.lease = (lease.token, now.addingTimeInterval(300))
+        return .allowed
     }
 
     var isHeld: Bool {
