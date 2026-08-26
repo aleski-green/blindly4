@@ -43,14 +43,29 @@ enum CommandRegistry {
     static func execute(
         _ rawArguments: [String],
         session: AccessibilitySession = AccessibilitySession(),
-        logger: SessionLogger? = nil
+        logger: SessionLogger? = nil,
+        workflowLock: WorkflowLock? = nil
     ) -> ExecutionResponse {
         let startedAt = Date()
         let profileEnabled = rawArguments.contains("--profile")
-        let arguments = rawArguments.filter { $0 != "--profile" && $0 != "--no-log" }
-        let context = ExecutionContext(session: session, profileEnabled: profileEnabled)
+        var context = ExecutionContext(session: session, profileEnabled: profileEnabled)
         let status: Int32
         do {
+            let parsed = try workflowArguments(rawArguments)
+            let arguments = parsed.command.filter { $0 != "--profile" && $0 != "--no-log" }
+            context = ExecutionContext(
+                session: session,
+                profileEnabled: profileEnabled,
+                workflowLock: workflowLock,
+                workflowToken: parsed.token
+            )
+            if let workflowLock, arguments.first != "workflow" {
+                switch workflowLock.authorize(token: parsed.token) {
+                case .allowed: break
+                case .busy: throw CLIError.workflowBusy
+                case .invalid: throw CLIError.workflowLeaseInvalid
+                }
+            }
             try run(arguments, context: context)
             status = 0
         } catch {

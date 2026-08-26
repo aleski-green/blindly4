@@ -118,10 +118,11 @@ enum LocalServiceServer {
         defer { unlink(path) }
 
         let session = AccessibilitySession()
+        let workflowLock = WorkflowLock()
         let logger = SessionLogger()
         defer { logger.finish(reason: "idle_timeout") }
         var lastActivity = Date()
-        while Date().timeIntervalSince(lastActivity) < 60 {
+        while workflowLock.isHeld || Date().timeIntervalSince(lastActivity) < 60 {
             var pollDescriptor = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
             guard poll(&pollDescriptor, 1, 1_000) > 0 else { continue }
             let client = accept(descriptor, nil, nil)
@@ -135,7 +136,8 @@ enum LocalServiceServer {
             let response = CommandRegistry.execute(
                 request.arguments,
                 session: session,
-                logger: logger
+                logger: logger,
+                workflowLock: workflowLock
             )
             guard let responseData = try? JSONEncoder().encode(response) else { continue }
             _ = writeAll(responseData, to: client)

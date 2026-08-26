@@ -98,8 +98,38 @@ enum SelfTest {
         } catch {
             return "a zero scroll amount did not produce a usage error"
         }
+        if let failure = checkWorkflowLock() { return failure }
         if let failure = checkSessionLogging() { return failure }
         if let failure = checkSchemaDescribesEveryCommand() { return failure }
+        return nil
+    }
+
+    private static func checkWorkflowLock() -> String? {
+        let lock = WorkflowLock()
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        guard let token = lock.acquire(now: now),
+              lock.authorize(token: nil, now: now) == .busy,
+              lock.authorize(token: token, now: now) == .allowed,
+              lock.release(token: "wrong", now: now) == .busy,
+              lock.release(token: token, now: now) == .allowed,
+              lock.authorize(token: nil, now: now) == .allowed else {
+            return "workflow lock did not isolate and release a workflow"
+        }
+        guard let expiring = lock.acquire(now: now),
+              lock.authorize(token: expiring, now: now.addingTimeInterval(299)) == .allowed,
+              lock.authorize(token: nil, now: now.addingTimeInterval(301)) == .busy,
+              lock.authorize(token: nil, now: now.addingTimeInterval(600)) == .allowed,
+              lock.authorize(token: expiring, now: now.addingTimeInterval(600)) == .invalid else {
+            return "workflow lock did not renew on activity or expire after five minutes"
+        }
+        do {
+            let parsed = try workflowArguments(["show", "--lease", "wf_test", "--depth", "2"])
+            guard parsed.command == ["show", "--depth", "2"], parsed.token == "wf_test" else {
+                return "workflow token was not removed before command parsing"
+            }
+        } catch {
+            return "workflow token parsing failed"
+        }
         return nil
     }
 
