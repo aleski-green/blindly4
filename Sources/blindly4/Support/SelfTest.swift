@@ -98,9 +98,50 @@ enum SelfTest {
         } catch {
             return "a zero scroll amount did not produce a usage error"
         }
+        if let failure = checkKeyGuard() { return failure }
         if let failure = checkWorkflowLock() { return failure }
         if let failure = checkSessionLogging() { return failure }
         if let failure = checkSchemaDescribesEveryCommand() { return failure }
+        return nil
+    }
+
+    private static func checkKeyGuard() -> String? {
+        let command = CommandRegistry.command(named: "key")
+        guard command?.risk == .externalCommit,
+              command?.optionNames.isSuperset(of: ["pid", "target-path", "require-value"]) == true else {
+            return "guarded key options or risk classification missing"
+        }
+        do {
+            let basic = try Invocation(command: "key", arguments: ["--key", "tab"])
+            guard try KeyGuard.parse(basic) == nil else { return "ordinary key unexpectedly requires a draft" }
+            let full = try Invocation(command: "key", arguments: ["--pid", "123", "--target-path", "0.1", "--require-value", "draft"])
+            guard let draft = try KeyGuard.parse(full) else { return "complete key guard was ignored" }
+            for mask in 0..<16 {
+                var posted = false
+                do {
+                    try draft.perform(writable: { mask & 1 != 0 }, focused: { mask & 2 != 0 },
+                                      matches: { mask & 4 != 0 }, frontmost: { mask & 8 != 0 },
+                                      post: { posted = true })
+                    if mask != 15 { return "unsafe guarded key was allowed" }
+                } catch CLIError.accessibility {
+                    if mask == 15 { return "valid guarded key was blocked" }
+                }
+                if posted != (mask == 15) { return "guarded key posted despite failed preconditions" }
+            }
+            for args in [
+                ["--target-path", "0.1"], ["--require-value", "draft"],
+                ["--target-path", "0.1", "--require-value", "draft"],
+                ["--pid", "123", "--target-path", "0.1"],
+                ["--pid", "123", "--require-value", "draft"],
+                ["--pid", "123", "--target-path", "0.1", "--require-value", "\n"],
+                ["--pid", "0", "--target-path", "0.1", "--require-value", "draft"]
+            ] {
+                do {
+                    _ = try KeyGuard.parse(Invocation(command: "key", arguments: args))
+                    return "incomplete guarded key accepted"
+                } catch CLIError.usage { }
+            }
+        } catch { return "guarded key self-test failed: \(error)" }
         return nil
     }
 

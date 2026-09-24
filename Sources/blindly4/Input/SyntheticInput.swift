@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 private let keyCodes: [String: CGKeyCode] = [
-    "return": 36, "enter": 36, "tab": 48, "space": 49, "escape": 53, "delete": 51,
+    "return": 36, "enter": 36, "tab": 48, "space": 49, "escape": 53, "delete": 51, "backspace": 51,
     "left": 123, "right": 124, "down": 125, "up": 126,
     "a": 0, "b": 11, "c": 8, "d": 2, "e": 14, "f": 3, "g": 5,
     "h": 4, "i": 34, "j": 38, "k": 40, "l": 37, "m": 46, "n": 45,

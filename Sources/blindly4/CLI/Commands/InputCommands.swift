@@ -1,4 +1,5 @@
-import CoreFoundation
+import AppKit
+import ApplicationServices
 
 let inputCommands = CommandGroup(title: "Desktop input", commands: [
     Command("click", "--x X --y Y [--pid PID]", summary: "Inject a system-wide mouse click.", risk: .uiMutation) { invocation, context in
@@ -73,12 +74,29 @@ let inputCommands = CommandGroup(title: "Desktop input", commands: [
         printJSON(result, to: context)
     },
 
-    Command("key", "--key return|tab|escape|space|delete|up|down|left|right|command+k [--pid PID]", summary: "Inject a system-wide key; Return may submit external data.", risk: .externalCommit) { invocation, context in
+    Command("key", "--key return|enter|tab|escape|space|delete|backspace|up|down|left|right|command+k [--pid PID] [--target-path PATH --require-value TEXT]", summary: "Inject a key, optionally requiring the exact focused draft; Return may submit external data.", risk: .externalCommit) { invocation, context in
         let key = try invocation.value("key")
+        let draftGuard = try KeyGuard.parse(invocation)
         let pid = try requireInputTarget(pidText: invocation.optional("pid"))
-        try postKey(key)
+        if let draftGuard {
+            let app = try invocation.application()
+            let target = try elementAtPath(draftGuard.path, from: app, profile: context.profile)
+            try draftGuard.perform(
+                writable: { ["AXTextArea", "AXTextField", "AXComboBox"].contains(textAttribute(target, "AXRole", profile: context.profile)) },
+                focused: {
+                    guard let focused = copyAttribute(app, kAXFocusedUIElementAttribute, profile: context.profile) else { return false }
+                    return CFEqual(focused as CFTypeRef, target)
+                },
+                matches: { hasExactVisibleText(in: target, expected: draftGuard.expected, profile: context.profile) },
+                frontmost: { NSWorkspace.shared.frontmostApplication.map { Int($0.processIdentifier) } == pid },
+                post: { try postKey(key) }
+            )
+        } else {
+            try postKey(key)
+        }
         var result: JSON = ["key": key, "ok": true]
         if let pid { result["pid"] = pid }
+        if let draftGuard { result["targetPath"] = draftGuard.path; result["verified"] = true }
         printJSON(result, to: context)
     }
 ])

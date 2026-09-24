@@ -113,6 +113,20 @@ blindly4 press --pid 14476 --path 0.2.5 --expect-description Send \
 
 If the composer cannot expose the exact draft through its own AX value, title, description, or descendants, blindly4 fails closed. This prevents a pre-existing draft or text from another control from being sent accidentally.
 
+If no identifiable Send button is exposed and the app uses Enter to send, verify
+the recipient, rediscover and focus the composer, then use a guarded key:
+
+```sh
+blindly4 focus --pid 14476 --path 0.2.4
+blindly4 key --pid 14476 --key return --target-path 0.2.4 --require-value 'Hello from blindly4'
+```
+
+Both guard options and a PID are required together. The command refuses input
+unless the target is the focused text control, its draft matches exactly, and the
+app is still frontmost. `verified` reports these preconditions, not delivery;
+inspect the outgoing conversation before reporting success or retrying.
+Keyboard names include `return`/`enter`, `tab`, and `delete`/`backspace` (backward delete).
+
 ## Watching for UI changes
 
 Use a memory-only snapshot to report new accessible elements in any region. This is
@@ -209,8 +223,9 @@ actually sends the message.
   before emitting a system-wide event, so a window that steals focus cannot receive
   the keystrokes.
 - Never send with bare `type` followed by `key --key return`. Use
-  `paste --target-path` with `press --require-value`, which fails closed unless the
-  composer exposes exactly the intended text.
+  `paste --target-path` with `press --require-value`, or guarded
+  `key --target-path --require-value` when no Send control is available. Both
+  fail closed unless the composer exposes exactly the intended text.
 - There is no unread state in the accessibility tree. Use `snapshot` before and
   `changes` after; this works regardless of how an app labels its messages.
 - Add `--require-selected` to `press` when the target exposes `AXSelected`, so a
@@ -283,5 +298,6 @@ command with `--no-service` to bypass the service for diagnostics.
 For system-wide input commands (`click`, `type`, `paste`, `scroll`, and `key`), pass `--pid` to
 make Blindly activate and verify the intended foreground application before it emits the
 event. For external messages, also pass `paste --target-path` and use `press` with
-`--require-value-path` / `--require-value`; a PID guard alone cannot prove that a global
+`--require-value-path` / `--require-value`, or guarded `key --target-path --require-value`;
+a PID guard alone cannot prove that a global
 keyboard event reached the intended composer.
