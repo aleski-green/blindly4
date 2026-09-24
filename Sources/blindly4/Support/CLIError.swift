@@ -3,6 +3,8 @@ import Foundation
 enum CLIError: Error {
     case usage(String)
     case accessibility(String)
+    case permissionDenied(String)
+    case focusUnavailable
     case workflowBusy
     case workflowLeaseInvalid
 }
@@ -15,7 +17,13 @@ func report(_ error: Error, showUsage: Bool, to context: ExecutionContext) -> In
         if showUsage { context.writeStderr("\n\(usage())\n") }
         return 64
     case CLIError.accessibility(let message):
-        printJSON(["error": message], to: context)
+        printJSON(["code": "accessibility_error", "error": message], to: context)
+        return 77
+    case CLIError.permissionDenied(let message):
+        printJSON(["code": "accessibility_permission_denied", "error": message], to: context)
+        return 77
+    case CLIError.focusUnavailable:
+        printJSON(["code": "focus_unavailable", "error": "No focused accessibility element is available"], to: context)
         return 77
     case CLIError.workflowBusy:
         printJSON(["code": "workflow_busy", "error": "Another workflow owns the Blindly service"], to: context)

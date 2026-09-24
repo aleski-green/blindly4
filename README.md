@@ -129,6 +129,13 @@ Keyboard names include `return`/`enter`, `tab`, and `delete`/`backspace` (backwa
 
 ## Watching for UI changes
 
+Accessibility errors retain exit code 77 and include a JSON `code`:
+`accessibility_permission_denied` requires permission repair; `focus_unavailable`
+means no focused element was exposed; other AX or draft-guard failures use
+`accessibility_error`. Use `focused --pid PID` for app-scoped focus observation.
+A missing focus can be retried once after rediscovering and focusing the intended
+control. Never use focus recovery to bypass an exact-draft or send guard failure.
+
 Use a memory-only snapshot to report new accessible elements in any region. This is
 universal: it does not assume an app's message labels or wording.
 

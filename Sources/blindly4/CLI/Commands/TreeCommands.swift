@@ -35,9 +35,10 @@ let treeCommands = CommandGroup(title: "Accessibility tree", commands: [
         printJSON(["matches": found.map { detail(of: $0.element, path: $0.path, profile: context.profile) }], to: context)
     },
 
-    Command("focused", summary: "Inspect the system-wide focused accessibility element.") { _, context in
-        guard let focused = copyElementAttribute(AXUIElementCreateSystemWide(), "AXFocusedUIElement", profile: context.profile) else {
-            throw CLIError.accessibility("No focused accessibility element is available")
+    Command("focused", "[--pid PID]", summary: "Inspect the focused accessibility element in an app, or system-wide when no PID is supplied.") { invocation, context in
+        let root = invocation.optional("pid") == nil ? AXUIElementCreateSystemWide() : try invocation.application()
+        guard let focused = copyElementAttribute(root, "AXFocusedUIElement", profile: context.profile) else {
+            throw CLIError.focusUnavailable
         }
         printJSON(detail(of: focused, profile: context.profile), to: context)
     }

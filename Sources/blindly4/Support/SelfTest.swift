@@ -98,6 +98,19 @@ enum SelfTest {
         } catch {
             return "a zero scroll amount did not produce a usage error"
         }
+        for (error, expected) in [(CLIError.focusUnavailable, "focus_unavailable"),
+                                  (CLIError.permissionDenied("Permission missing"), "accessibility_permission_denied"),
+                                  (CLIError.accessibility("Draft mismatch"), "accessibility_error")] {
+            let context = ExecutionContext()
+            guard report(error, showUsage: false, to: context) == 77,
+                  let data = context.stdout.data(using: .utf8),
+                  let payload = try? JSONSerialization.jsonObject(with: data) as? JSON,
+                  payload["code"] as? String == expected,
+                  payload["error"] is String else { return "accessibility error classification failed" }
+        }
+        guard CommandRegistry.command(named: "focused")?.optionNames.contains("pid") == true else {
+            return "focused command lost app-scoped observation"
+        }
         if let failure = checkKeyGuard() { return failure }
         if let failure = checkWorkflowLock() { return failure }
         if let failure = checkSessionLogging() { return failure }
