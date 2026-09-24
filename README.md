@@ -165,6 +165,25 @@ command's risk classification, and `blindly4 schema` for machine-readable metada
 AX paths are indexes into a live tree and may change whenever the target UI updates.
 Rediscover the target immediately before performing a mutation.
 
+Before entering text, inspect the actual editable control. An `AXGroup` can contain
+a focused `AXTextArea` without being writable itself. If the candidate is a
+container, discover its children at sufficient depth and inspect the intended
+editable child. Verify the app and destination, not just its role. Do not infer
+editability from focus, invent child indexes, or reuse historical numeric paths.
+
+A `paste --target-path` rejection saying the target is not a writable AX text
+control happens before input. Allow one bounded rediscovery and inspection of the
+intended editable child, then one guarded paste retry. This exception does not
+apply to exact-draft, focus, or submission guard failures. Never classify an error
+as pre-input rejection from its exit code alone. If input or submission may have
+occurred, inspect the draft and outcome before considering a retry.
+
+Reuse successful guarded-paste verification when sufficient; retain fresh
+submission guards and the required post-action checks. Avoid redundant identical
+inspections. Verify the requested result: tool success, an injected key, or an
+empty composer alone does not prove delivery.
+
+
 ## Using blindly4 inside Codex
 
 blindly4 is a plain CLI that prints JSON to stdout, so a coding agent drives it by
