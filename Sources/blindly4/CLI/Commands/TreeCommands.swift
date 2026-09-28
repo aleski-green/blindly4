@@ -28,10 +28,9 @@ let treeCommands = CommandGroup(title: "Accessibility tree", commands: [
         }
         let depth = try invocation.integer("depth", default: 8, minimum: 0)
         let limit = try invocation.integer("limit", default: 25, minimum: 1)
-        let found = findCachedOrDescendants(
-            root: try invocation.application(), invocation: invocation, title: title, role: role, value: value, description: description,
-            depth: depth, limit: limit, context: context
-        )
+        let found = findDescendants(
+            of: try invocation.application(), depth: depth, limit: limit, profile: context.profile
+        ) { matches($0, title: title, role: role, value: value, description: description, profile: context.profile) }
         printJSON(["matches": found.map { detail(of: $0.element, path: $0.path, profile: context.profile) }], to: context)
     },
 

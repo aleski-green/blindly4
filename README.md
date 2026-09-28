@@ -49,32 +49,26 @@ blindly4 press --path 0.2
 blindly4 set-value --path 0.2 --value 'new text'
 ```
 
-## Session logs
+## Stateless execution (schema version 2)
 
-blindly4 writes compact NDJSON audit logs by default. A service process uses one log
-for its lifetime; `--no-service` creates one log for that direct invocation.
-Logs live in `.logs/` at the package root and are named with their UTC start time,
-for example `session_s_20260731T175601123Z.ndjson`.
+Every invocation runs one command directly against the live desktop, prints its
+result, and exits. Blindly keeps no cross-command state: no background service,
+search cache, named snapshots, workflow leases, or log files. Optional `--profile`
+diagnostics go only to stderr. The desktop itself remains stateful, and input still
+changes applications and may temporarily use the clipboard.
 
-Discovery commands (`show`, `tree`, `find`, `inspect`, `actions`, and `focused`) write
-unredacted AX snapshots with a snapshot ID. Later commands record only their app/PID,
-AX path, status, duration, and the latest snapshot ID for that PID. They do not record
-arguments, stdout, or stderr. Snapshots can still contain private visible text.
+Callers own before/after comparisons, any audit trail, and exclusive desktop access
+for the entire workflow. Serialize even commands targeting different apps: keyboard,
+mouse, focus, and clipboard are shared. A full AX path does not prevent concurrent
+input or guarantee that child indexes still identify the same control. Sapiens4
+already provides a single computer owner for its managed callers; standalone
+callers must supply equivalent coordination. Blindly does not enforce it.
 
-Set `BLINDLY4_LOG_MODE=full` to use the legacy full-fidelity format, which records
-arguments, stdout, and stderr. If you do not want any logging, add `--no-log` to an
-individual command or start blindly4 with `BLINDLY4_NO_LOG=1`.
-
-Add `--no-log` to omit one command from a service log. Set `BLINDLY4_NO_LOG=1` before
-starting Blindly to disable logging for the whole service process. Set
-`BLINDLY4_LOG_DIR` to override the log directory.
-
-## Coordinating workflows
-
-Use `workflow acquire` to obtain a local-service lock, pass the returned token as
-`--lease TOKEN` to every command in that workflow, then release it with
-`workflow release --lease TOKEN`. Each valid command refreshes the five-minute expiry.
-While held, other commands return `workflow_busy`.
+This intentionally removes `serve`, `workflow`, `snapshot`, `changes`, `--lease`,
+`--no-service`, and `--no-log`; obsolete commands/options fail with exit 64.
+The `BLINDLY4_LOG_*` and `BLINDLY4_NO_LOG` environment settings are no longer used.
+Existing log files are left untouched and remain gitignored. Retained UI commands
+keep their JSON results, permission checks, and input/draft guards.
 
 ## Sending through the desktop app
 
@@ -136,18 +130,9 @@ means no focused element was exposed; other AX or draft-guard failures use
 A missing focus can be retried once after rediscovering and focusing the intended
 control. Never use focus recovery to bypass an exact-draft or send guard failure.
 
-Use a memory-only snapshot to report new accessible elements in any region. This is
-universal: it does not assume an app's message labels or wording.
-
-```sh
-# Before an operation, record the chat/message region.
-blindly4 snapshot --pid 12345 --name before --path 0.2.1.0 --depth 7
-
-# After waiting, return only AX elements that were not present in that region.
-blindly4 changes --pid 12345 --since before --path 0.2.1.0 --depth 7
-```
-
-Snapshots live only in the local service process and disappear when it exits.
+For before/after comparison, capture `tree`, `show`, or targeted `find` results in
+the caller and compare fresh observations there. Blindly does not retain a baseline
+or infer unread messages. Read again after navigation and before mutations.
 
 ## Navigation workflow
 
@@ -156,8 +141,8 @@ Snapshots live only in the local service process and disappear when it exits.
 3. Copy the returned `path` and use `blindly4 inspect --path PATH` to check its role and supported actions. Use `show-menu` when the element exposes `AXShowMenu`.
 4. For text fields, use `blindly4 focus --path PATH`, then `blindly4 set-value --path PATH --value 'text'`. For tabs and buttons, use `blindly4 press --path PATH`.
 
-`tree`, `show`, `find`, `focused`, `inspect`, `actions`, `apps`, and `changes` are
-read-only. `snapshot` changes only memory-local service state. Other commands can
+`tree`, `show`, `find`, `focused`, `inspect`, `actions`, and `apps` are
+read-only. Other commands can
 change the desktop UI; `press` and `key` can submit or commit an external action.
 Use `blindly4 --help` for the command reference, `blindly4 COMMAND --help` for a
 command's risk classification, and `blindly4 schema` for machine-readable metadata.
@@ -204,7 +189,7 @@ Settings → Privacy & Security → Accessibility**. Without it every AX command
 
 Have the agent run `blindly4 schema` at the start of a session. It returns every
 command with its options and a `risk` field: `read-only` inspects without changing
-anything, `local-state` writes only in-memory service state, `ui-mutation` moves
+anything, `ui-mutation` moves
 focus or injects input, and `external-commit` may send, submit, buy, or delete and
 must never be run speculatively.
 
@@ -225,9 +210,8 @@ blindly4 show --pid 14476 --depth 6
 blindly4 find --pid 14476 --title 'Jane Doe' --depth 10
 blindly4 press --pid 14476 --path 0.2.1.3
 
-# 4. Record the message region, wait, then read only what is new.
-blindly4 snapshot --pid 14476 --name before --path 0.2.4 --depth 7
-blindly4 changes --pid 14476 --since before --path 0.2.4 --depth 7
+# 4. Read the conversation; keep any comparison baseline in the caller.
+blindly4 tree --pid 14476 --depth 7 --max-nodes 500
 
 # 5. Rediscover the composer, write the draft, and verify it.
 blindly4 find --pid 14476 --role AXTextArea --depth 10
@@ -238,8 +222,8 @@ blindly4 press --pid 14476 --path 0.2.7 --expect-description Send \
   --require-value-path 0.2.6 --require-value 'Reply text'
 ```
 
-Steps 1 through 4 are safe to run unattended. Step 6 is `external-commit` and
-actually sends the message.
+Step 3 uses `press`, an `external-commit` command: first verify that the live target
+is the intended conversation. Step 6 sends the message and requires authorization.
 
 ### Rules for the agent
 
@@ -252,8 +236,9 @@ actually sends the message.
   `paste --target-path` with `press --require-value`, or guarded
   `key --target-path --require-value` when no Send control is available. Both
   fail closed unless the composer exposes exactly the intended text.
-- There is no unread state in the accessibility tree. Use `snapshot` before and
-  `changes` after; this works regardless of how an app labels its messages.
+- There is no universal unread state in the accessibility tree. Compare before/after
+  observations in the caller; Blindly retains no snapshots between commands.
+- Serialize the entire desktop workflow in the caller; do not run concurrent input.
 - Add `--require-selected` to `press` when the target exposes `AXSelected`, so a
   follow-up step cannot act on a selection that never happened.
 - Check the exit code. `64` is invalid usage, `77` is a permission or accessibility
@@ -269,7 +254,6 @@ Sources/blindly4/
   CLI/Commands/           one file per group of commands
   Accessibility/          AX element reading, tree walking, path resolution
   Input/                  synthetic mouse/keyboard events, NSWorkspace actions
-  Service/                memory-only local service and Unix socket transport
   Support/                JSON output, errors, argument parsing
 ```
 
@@ -314,12 +298,11 @@ contracts, and safety invariants for coding agents and contributors.
 
 ## Performance
 
-One-shot commands automatically share a per-user local service while it is active. The
-service keeps only in-memory, validated `find --limit 1` path hints; it never writes UI
-metadata or search text to disk, and falls back to a normal accessibility-tree search if
-the app, window, or target has changed. Add `--profile` to a command to inspect elapsed
-time, accessibility reads, visited nodes, cache hits, and paste wait time. Prefix a
-command with `--no-service` to bypass the service for diagnostics.
+Every `find` traverses the current accessibility tree, stopping at its depth and
+result limits. Repeated `find --limit 1` calls no longer reuse a path hint; direct
+path operations still resolve only the requested live path. Batched AX reads and
+bounded traversal remain. Add `--profile` to inspect elapsed time, accessibility
+reads, visited nodes, and paste wait time; no profiling data is stored.
 
 For system-wide input commands (`click`, `type`, `paste`, `scroll`, and `key`), pass `--pid` to
 make Blindly activate and verify the intended foreground application before it emits the

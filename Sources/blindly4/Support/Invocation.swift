@@ -6,19 +6,15 @@ struct Invocation {
     let command: String
     let options: [String: String]
     let flags: Set<String>
-    let positionals: [String]
 
     init(command: String, arguments: [String], allowedOptions: Set<String>? = nil) throws {
         var options: [String: String] = [:]
         var flags: Set<String> = []
-        var positionals: [String] = []
         var index = 0
         while index < arguments.count {
             let token = arguments[index]
             guard token.hasPrefix("--") else {
-                positionals.append(token)
-                index += 1
-                continue
+                throw CLIError.usage("Unexpected argument for \(command): \(token)")
             }
             let optionName = String(token.dropFirst(2))
             if let allowedOptions, !allowedOptions.contains(optionName) {
@@ -38,7 +34,6 @@ struct Invocation {
         self.command = command
         self.options = options
         self.flags = flags
-        self.positionals = positionals
     }
 
     func optional(_ name: String) -> String? {

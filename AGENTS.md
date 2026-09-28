@@ -38,11 +38,10 @@ If automation is needed, do it every `{T}` minutes/hours.
 
 ## Architecture
 
-- `Sources/blindly4/main.swift`: process entry point and local-service dispatch
+- `Sources/blindly4/main.swift`: one-shot process entry point
 - `Sources/blindly4/CLI/`: command registry, metadata, help, and command handlers
-- `Sources/blindly4/Accessibility/`: AX reads, tree traversal, paths, and search caching
+- `Sources/blindly4/Accessibility/`: live AX reads, tree traversal, and paths
 - `Sources/blindly4/Input/`: application activation and synthetic keyboard/mouse input
-- `Sources/blindly4/Service/`: per-user, memory-only Unix socket service
 - `Sources/blindly4/Support/`: parsing, errors, output, profiling, and self-tests
 
 Commands are declared once in a `CommandGroup`. Keep their summary, risk,
@@ -57,20 +56,17 @@ Treat desktop input as untrusted and potentially destructive.
 - Never weaken exact draft matching, target-path checks, or fail-closed send guards.
 - Rediscover an AX path immediately before a mutation; child indexes can change when
   the UI changes.
-- Classify commands accurately: `read-only`, `local-state`, `ui-mutation`, or
+- Classify commands accurately: `read-only`, `ui-mutation`, or
   `external-commit`.
 - `press` and `key` are `external-commit` because they may send, submit, buy, delete,
   or otherwise trigger an irreversible action.
 - Keep read-only commands free of external UI mutations.
-- Compact snapshot-and-path session logging is enabled by default. Discovery snapshots
-  are unredacted and may contain AX metadata, search text, text values, URLs, and other
-  visible private text; later command events contain only metadata and AX paths. They are
-  written to `.logs/` at the package root and must remain gitignored. Set
-  `BLINDLY4_LOG_MODE=full` only when the legacy full plaintext format is required.
-- Use `--no-log` to omit one command from the session log, or start blindly4 with
-  `BLINDLY4_NO_LOG=1` to disable logging for the whole service process.
-- Search caches and named AX snapshots remain memory-only. They are distinct from
-  audit discovery snapshots written by the session logger.
+- Keep execution stateless across invocations: no service, cache, named snapshots,
+  workflow leases, or file logging. Profiling is invocation-local stderr only.
+- The caller must serialize whole desktop workflows; removing Blindly's lease does
+  not make concurrent input safe. Keep Sapiens4's host-level computer ownership.
+- Existing `.logs/` files must remain gitignored; removing logging does not authorize
+  deleting users' prior logs.
 
 Changes to these invariants require explicit review and focused tests.
 

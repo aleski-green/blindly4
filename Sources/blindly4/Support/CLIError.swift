@@ -5,8 +5,6 @@ enum CLIError: Error {
     case accessibility(String)
     case permissionDenied(String)
     case focusUnavailable
-    case workflowBusy
-    case workflowLeaseInvalid
 }
 
 /// Renders a failure and returns the exit code the top level should use.
@@ -25,12 +23,6 @@ func report(_ error: Error, showUsage: Bool, to context: ExecutionContext) -> In
     case CLIError.focusUnavailable:
         printJSON(["code": "focus_unavailable", "error": "No focused accessibility element is available"], to: context)
         return 77
-    case CLIError.workflowBusy:
-        printJSON(["code": "workflow_busy", "error": "Another workflow owns the Blindly service"], to: context)
-        return 75
-    case CLIError.workflowLeaseInvalid:
-        printJSON(["code": "workflow_lease_invalid", "error": "The workflow token is invalid or expired; acquire a new lock"], to: context)
-        return 75
     default:
         printJSON(["error": String(describing: error)], to: context)
         return 1

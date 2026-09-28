@@ -2,7 +2,6 @@ import Foundation
 
 enum CommandRisk: String, Sendable {
     case readOnly = "read-only"
-    case localState = "local-state"
     case uiMutation = "ui-mutation"
     case externalCommit = "external-commit"
 }

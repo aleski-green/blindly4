@@ -29,9 +29,6 @@ enum SelfTest {
             children: { node, _ in node.children }, matches: { $0.name == "target" }
         )
         guard shallow.isEmpty else { return "depth limit was ignored" }
-        let normalizedA = SearchKey(pid: 1, title: "  ÁlEx ", role: "Button", value: nil)
-        let normalizedB = SearchKey(pid: 1, title: "alex", role: "button", value: nil)
-        guard normalizedA == normalizedB else { return "search-key normalization is inconsistent" }
         guard sameVisibleText("\u{200E}hello\u{2069}", "hello") else {
             return "visible draft text did not ignore AX directionality markers"
         }
@@ -112,8 +109,7 @@ enum SelfTest {
             return "focused command lost app-scoped observation"
         }
         if let failure = checkKeyGuard() { return failure }
-        if let failure = checkWorkflowLock() { return failure }
-        if let failure = checkSessionLogging() { return failure }
+        if let failure = checkStatelessCLI() { return failure }
         if let failure = checkSchemaDescribesEveryCommand() { return failure }
         return nil
     }
@@ -158,167 +154,31 @@ enum SelfTest {
         return nil
     }
 
-    private static func checkWorkflowLock() -> String? {
-        let lock = WorkflowLock()
-        let now = Date(timeIntervalSince1970: 1_750_000_000)
-        guard let token = lock.acquire(now: now),
-              lock.authorize(token: nil, now: now) == .busy,
-              lock.authorize(token: token, now: now) == .allowed,
-              lock.release(token: "wrong", now: now) == .busy,
-              lock.release(token: token, now: now) == .allowed,
-              lock.authorize(token: nil, now: now) == .allowed else {
-            return "workflow lock did not isolate and release a workflow"
-        }
-        guard let expiring = lock.acquire(now: now),
-              lock.authorize(token: expiring, now: now.addingTimeInterval(299)) == .allowed,
-              lock.authorize(token: nil, now: now.addingTimeInterval(301)) == .busy,
-              lock.authorize(token: nil, now: now.addingTimeInterval(600)) == .allowed,
-              lock.authorize(token: expiring, now: now.addingTimeInterval(600)) == .invalid else {
-            return "workflow lock did not renew on activity or expire after five minutes"
-        }
-        do {
-            let parsed = try workflowArguments(["show", "--lease", "wf_test", "--depth", "2"])
-            guard parsed.command == ["show", "--depth", "2"], parsed.token == "wf_test" else {
-                return "workflow token was not removed before command parsing"
+    private static func checkStatelessCLI() -> String? {
+        for name in ["serve", "workflow", "snapshot", "changes"] {
+            guard CommandRegistry.command(named: name) == nil,
+                  CommandRegistry.execute([name]).status == 64 else {
+                return "removed stateful command was accepted: \(name)"
             }
-        } catch {
-            return "workflow token parsing failed"
+        }
+        for arguments in [
+            ["--no-service", "schema"], ["schema", "--no-log"],
+            ["schema", "--lease", "old-token"], ["schema", "unexpected"]
+        ] {
+            guard CommandRegistry.execute(arguments).status == 64 else {
+                return "removed option or unexpected positional was silently accepted"
+            }
+        }
+        let profiled = CommandRegistry.execute(["schema", "--profile"])
+        let first = CommandRegistry.execute(["schema"])
+        let second = CommandRegistry.execute(["schema"])
+        guard profiled.status == 0, profiled.stderr.hasPrefix("profile elapsed_ms="),
+              !profiled.stderr.contains("cache_"), first.status == 0, second.status == 0,
+              first.stdout == second.stdout, first.stdout == profiled.stdout,
+              first.stderr.isEmpty, second.stderr.isEmpty else {
+            return "invocations leaked output or profiling state"
         }
         return nil
-    }
-
-    private static func checkSessionLogging() -> String? {
-        let startedAt = Date(timeIntervalSince1970: 1_750_000_000.123)
-        let filename = SessionLogger.filename(for: startedAt)
-        guard filename == "session_s_20250615T150640123Z.ndjson" else {
-            return "session log filename is not a UTC start timestamp"
-        }
-
-        let response = ExecutionResponse(
-            stdout: "{\"characters\":6,\"ok\":true}\n",
-            stderr: "",
-            status: 0
-        )
-        let event = SessionLogger.commandEvent(
-            arguments: ["type", "--text", "secret"],
-            response: response,
-            elapsedMilliseconds: 12.5,
-            at: startedAt
-        )
-        guard event["cmd"] as? String == "type",
-              event["args"] as? [String] == ["--text", "secret"],
-              event["timestamp"] is Int64,
-              (event["stdout"] as? JSON)?["characters"] as? Int == 6 else {
-            return "session command event omitted plaintext arguments, timestamp, or stdout JSON"
-        }
-
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("blindly4-self-test-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-
-        let pidOne = Int(ProcessInfo.processInfo.processIdentifier)
-        let pidTwo = pidOne + 1
-        let compactLogger = SessionLogger(
-            enabled: true,
-            mode: .treePaths,
-            logDirectory: directory,
-            startedAt: startedAt
-        )
-        compactLogger.log(
-            arguments: ["show", "--pid", "\(pidOne)"],
-            response: ExecutionResponse(stdout: "visible tree secret", stderr: "", status: 0),
-            elapsedMilliseconds: 1
-        )
-        compactLogger.log(
-            arguments: ["paste", "--pid", "\(pidOne)", "--target-path", "0.3", "--text", "secret"],
-            response: response,
-            elapsedMilliseconds: 2
-        )
-        compactLogger.log(
-            arguments: ["find", "--pid", "\(pidTwo)", "--title", "private label"],
-            response: ExecutionResponse(stdout: "{\"matches\":[]}", stderr: "", status: 0),
-            elapsedMilliseconds: 3
-        )
-        compactLogger.log(
-            arguments: ["press", "--pid", "\(pidOne)", "--path", "0.4"],
-            response: response,
-            elapsedMilliseconds: 4
-        )
-        compactLogger.finish(reason: "self_test")
-
-        let url = directory.appendingPathComponent(filename)
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
-            return "session logger did not create its NDJSON file"
-        }
-        let lines = text.split(separator: "\n")
-        guard lines.count == 6,
-              let start = decodedEvent(from: lines[0]),
-              let firstSnapshot = decodedEvent(from: lines[1]),
-              let paste = decodedEvent(from: lines[2]),
-              let secondSnapshot = decodedEvent(from: lines[3]),
-              let press = decodedEvent(from: lines[4]),
-              start["mode"] as? String == "tree_paths",
-              firstSnapshot["event"] as? String == "snapshot",
-              firstSnapshot["snapshotId"] as? String == "s-1",
-              firstSnapshot["snapshot"] as? String == "visible tree secret",
-              secondSnapshot["snapshotId"] as? String == "s-2",
-              paste["event"] as? String == "command",
-              paste["path"] as? String == "0.3",
-              paste["snapshotId"] as? String == "s-1",
-              press["snapshotId"] as? String == "s-1",
-              paste["args"] == nil,
-              paste["stdout"] == nil,
-              paste["stderr"] == nil,
-              !text.contains("\"--text\"") else {
-            return "tree-path logging did not keep snapshots and commands compact"
-        }
-
-        let fullDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("blindly4-self-test-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: fullDirectory) }
-        let fullLogger = SessionLogger(
-            enabled: true,
-            mode: .full,
-            logDirectory: fullDirectory,
-            startedAt: startedAt
-        )
-        fullLogger.log(
-            arguments: ["type", "--text", "secret"],
-            response: response,
-            elapsedMilliseconds: 12.5
-        )
-        fullLogger.finish(reason: "self_test")
-        let fullURL = fullDirectory.appendingPathComponent(filename)
-        guard let fullText = try? String(contentsOf: fullURL, encoding: .utf8),
-              let fullCommand = fullText.split(separator: "\n").dropFirst().first.flatMap(decodedEvent),
-              fullCommand["event"] as? String == "command",
-              fullCommand["args"] as? [String] == ["--text", "secret"],
-              (fullCommand["stdout"] as? JSON)?["characters"] as? Int == 6 else {
-            return "full logging did not preserve the legacy command event"
-        }
-
-        let suppressedDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("blindly4-self-test-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: suppressedDirectory) }
-        let suppressed = SessionLogger(
-            enabled: true,
-            logDirectory: suppressedDirectory,
-            startedAt: startedAt
-        )
-        suppressed.log(
-            arguments: ["apps", "--no-log"],
-            response: response,
-            elapsedMilliseconds: 1
-        )
-        suppressed.finish(reason: "self_test")
-        guard !FileManager.default.fileExists(atPath: suppressedDirectory.path) else {
-            return "--no-log created an empty session log"
-        }
-        return nil
-    }
-
-    private static func decodedEvent(from line: Substring) -> JSON? {
-        try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? JSON
     }
 
     /// The schema is how an agent discovers what exists, so it has to stay complete.
@@ -328,7 +188,8 @@ enum SelfTest {
               let commands = object["commands"] as? [JSON] else {
             return "the schema command did not produce readable JSON"
         }
-        guard commands.count == CommandRegistry.all.count,
+        guard object["schemaVersion"] as? Int == 2,
+              commands.count == CommandRegistry.all.count,
               commands.contains(where: { $0["name"] as? String == "schema" }) else {
             return "the schema omitted a command"
         }

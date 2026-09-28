@@ -6,8 +6,7 @@ enum CommandRegistry {
         applicationCommands,
         treeCommands,
         elementCommands,
-        inputCommands,
-        sessionCommands
+        inputCommands
     ]
 
     static let all: [Command] = groups.flatMap(\.commands)
@@ -40,45 +39,19 @@ enum CommandRegistry {
     }
 
     /// Executes a command without allowing an error to escape the process boundary.
-    static func execute(
-        _ rawArguments: [String],
-        session: AccessibilitySession = AccessibilitySession(),
-        logger: SessionLogger? = nil,
-        workflowLock: WorkflowLock? = nil
-    ) -> ExecutionResponse {
-        let startedAt = Date()
+    static func execute(_ rawArguments: [String]) -> ExecutionResponse {
         let profileEnabled = rawArguments.contains("--profile")
-        var context = ExecutionContext(session: session, profileEnabled: profileEnabled)
+        let context = ExecutionContext()
         let status: Int32
         do {
-            let parsed = try workflowArguments(rawArguments)
-            let arguments = parsed.command.filter { $0 != "--profile" && $0 != "--no-log" }
-            context = ExecutionContext(
-                session: session,
-                profileEnabled: profileEnabled,
-                workflowLock: workflowLock,
-                workflowToken: parsed.token
-            )
-            if let workflowLock, arguments.first != "workflow" {
-                switch workflowLock.authorize(token: parsed.token) {
-                case .allowed: break
-                case .busy: throw CLIError.workflowBusy
-                case .invalid: throw CLIError.workflowLeaseInvalid
-                }
-            }
+            let arguments = rawArguments.filter { $0 != "--profile" }
             try run(arguments, context: context)
             status = 0
         } catch {
             status = report(error, showUsage: true, to: context)
         }
         if profileEnabled { context.writeStderr(context.profile.render()) }
-        let response = context.response(status: status)
-        logger?.log(
-            arguments: rawArguments,
-            response: response,
-            elapsedMilliseconds: Date().timeIntervalSince(startedAt) * 1_000
-        )
-        return response
+        return context.response(status: status)
     }
 
     /// `help` and `-h` are ordinary text that a caller may legitimately pass as an

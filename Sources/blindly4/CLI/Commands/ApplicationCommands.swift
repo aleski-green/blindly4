@@ -1,4 +1,8 @@
 let applicationCommands = CommandGroup(title: "Applications", commands: [
+    Command("request-permission", summary: "Request macOS Accessibility permission.", risk: .uiMutation, requiresAccessibility: false) { _, context in
+        printJSON(requestAccessibilityPermission(), to: context)
+    },
+
     // Listing running applications comes from NSWorkspace, not the Accessibility API.
     Command("apps", summary: "List regular GUI applications and process IDs.", requiresAccessibility: false) { _, context in
         printJSON(["apps": runningApplications()], to: context)
@@ -18,7 +22,7 @@ let applicationCommands = CommandGroup(title: "Applications", commands: [
 
     Command("schema", summary: "Print machine-readable command and safety metadata.", requiresAccessibility: false) { _, context in
         printJSON([
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "commands": CommandRegistry.all.map(\.metadata)
         ], to: context)
     }

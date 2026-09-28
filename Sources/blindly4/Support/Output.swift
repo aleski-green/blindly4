@@ -2,31 +2,16 @@ import Foundation
 
 typealias JSON = [String: Any]
 
-struct ExecutionResponse: Codable {
+struct ExecutionResponse {
     let stdout: String
     let stderr: String
     let status: Int32
 }
 
 final class ExecutionContext {
-    let session: AccessibilitySession
-    let profile: Profile
-    let workflowLock: WorkflowLock?
-    let workflowToken: String?
+    let profile = Profile()
     private(set) var stdout = ""
     private(set) var stderr = ""
-
-    init(
-        session: AccessibilitySession = AccessibilitySession(),
-        profileEnabled: Bool = false,
-        workflowLock: WorkflowLock? = nil,
-        workflowToken: String? = nil
-    ) {
-        self.session = session
-        self.profile = Profile(enabled: profileEnabled)
-        self.workflowLock = workflowLock
-        self.workflowToken = workflowToken
-    }
 
     func writeStdout(_ text: String) { stdout += text }
     func writeStderr(_ text: String) { stderr += text }
