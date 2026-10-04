@@ -1,6 +1,8 @@
 # blindly4
 
-`blindly4` is a real macOS Accessibility API wrapper for inspecting and acting on the UI accessibility tree. It does **not** control VoiceOver or use `say`; it reads the same AX tree that assistive technologies use.
+`blindly4` inspects and operates the real desktop accessibility tree: Apple Accessibility on macOS and Microsoft UI Automation on Windows. It does **not** control VoiceOver or use `say`.
+
+**Windows 10/11:** see [native Windows builds, commands and tests](windows/README.md). Both ARM64 and x64 are supported. The examples below use the shared CLI; the Swift build and macOS permission instructions apply only to macOS.
 
 ## Build
 
