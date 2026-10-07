@@ -314,7 +314,7 @@ keyboard event reached the intended composer.
 
 ## License
 
-Blindly4 is source-available under the [Sustainable Use License 1.0](LICENSE.md).
-See [licensing and commercial services](LICENSING.md) for community use,
+Blindly4 is source-available under the [Sustainable Use License 1.0](license/LICENSE.md).
+See [licensing and commercial services](license/LICENSING.md) for community use,
 contributions, and future enterprise additions. Commercial inquiries:
 [license@sapiens4.ai](mailto:license@sapiens4.ai).
