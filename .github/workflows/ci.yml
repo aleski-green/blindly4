@@ -22,4 +22,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: blindly4-${{ runner.arch }}
-          path: .build/debug/blindly4
+          path: |
+            .build/debug/blindly4
+            LICENSE.md
+            LICENSING.md
+          if-no-files-found: error
