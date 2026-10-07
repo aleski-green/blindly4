@@ -310,3 +310,11 @@ event. For external messages, also pass `paste --target-path` and use `press` wi
 `--require-value-path` / `--require-value`, or guarded `key --target-path --require-value`;
 a PID guard alone cannot prove that a global
 keyboard event reached the intended composer.
+
+
+## License
+
+Blindly4 is source-available under the [Sustainable Use License 1.0](LICENSE.md).
+See [licensing and commercial services](LICENSING.md) for community use,
+contributions, and future enterprise additions. Commercial inquiries:
+[license@sapiens4.ai](mailto:license@sapiens4.ai).
