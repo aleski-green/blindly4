@@ -24,6 +24,6 @@ jobs:
           name: blindly4-${{ runner.arch }}
           path: |
             .build/debug/blindly4
-            LICENSE.md
-            LICENSING.md
+            license/LICENSE.md
+            license/LICENSING.md
           if-no-files-found: error
