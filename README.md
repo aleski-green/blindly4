@@ -1,6 +1,6 @@
 # blindly4
 
-This is a modified fork of [aleski-green/blindly4](https://github.com/aleski-green/blindly4), maintained at [fatmahalqaisi-code/blindly4](https://github.com/fatmahalqaisi-code/blindly4). It adds native Windows support while retaining the macOS implementation in the same repository. CI builds and tests macOS, Windows x64 and Windows ARM64.
+Windows support was added in the [fatmahalqaisi-code/blindly4 fork](https://github.com/fatmahalqaisi-code/blindly4). This modified version retains the macOS implementation in the same repository. CI builds and tests macOS, Windows x64 and Windows ARM64.
 
 `blindly4` inspects and operates the real desktop accessibility tree: Apple Accessibility on macOS and Microsoft UI Automation on Windows. It does **not** control VoiceOver or use `say`.
 
@@ -9,7 +9,7 @@ This is a modified fork of [aleski-green/blindly4](https://github.com/aleski-gre
 ## Build
 
 ```sh
-git clone https://github.com/fatmahalqaisi-code/blindly4.git
+git clone https://github.com/aleski-green/blindly4.git
 cd blindly4
 swift build -c release
 ./.build/release/blindly4 request-permission

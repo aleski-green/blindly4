@@ -7,7 +7,7 @@ The Windows implementation is a native C#/.NET 10 CLI backed by Microsoft UI Aut
 Requires Windows 10/11 and .NET SDK 10 to build. Published packages include the runtime and require no administrator access or WSL.
 
 ```powershell
-git clone https://github.com/fatmahalqaisi-code/blindly4.git
+git clone https://github.com/aleski-green/blindly4.git
 cd blindly4
 .\windows\build.ps1 -Runtime win-arm64 # or win-x64
 .\.build\windows\blindly4.exe --self-test
