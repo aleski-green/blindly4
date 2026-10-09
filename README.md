@@ -1,5 +1,7 @@
 # blindly4
 
+This is a modified fork of [aleski-green/blindly4](https://github.com/aleski-green/blindly4), maintained at [fatmahalqaisi-code/blindly4](https://github.com/fatmahalqaisi-code/blindly4). It adds native Windows support while retaining the macOS implementation in the same repository. CI builds and tests macOS, Windows x64 and Windows ARM64.
+
 `blindly4` inspects and operates the real desktop accessibility tree: Apple Accessibility on macOS and Microsoft UI Automation on Windows. It does **not** control VoiceOver or use `say`.
 
 **Windows 10/11:** see [native Windows builds, commands and tests](windows/README.md). Both ARM64 and x64 are supported. The examples below use the shared CLI; the Swift build and macOS permission instructions apply only to macOS.
@@ -7,7 +9,7 @@
 ## Build
 
 ```sh
-git clone https://github.com/aleski-green/blindly4.git
+git clone https://github.com/fatmahalqaisi-code/blindly4.git
 cd blindly4
 swift build -c release
 ./.build/release/blindly4 request-permission
@@ -312,3 +314,11 @@ event. For external messages, also pass `paste --target-path` and use `press` wi
 `--require-value-path` / `--require-value`, or guarded `key --target-path --require-value`;
 a PID guard alone cannot prove that a global
 keyboard event reached the intended composer.
+
+
+## License
+
+Blindly4 is source-available under the [Sustainable Use License 1.0](license/LICENSE.md).
+See [licensing and commercial services](license/LICENSING.md) for community use,
+contributions, and future enterprise additions. Commercial inquiries:
+[license@sapiens4.ai](mailto:license@sapiens4.ai).

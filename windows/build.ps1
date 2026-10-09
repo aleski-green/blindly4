@@ -3,4 +3,7 @@ $ErrorActionPreference = 'Stop'
 $destination = Join-Path $PSScriptRoot '../.build/windows'
 dotnet publish (Join-Path $PSScriptRoot 'Blindly4.csproj') -c Release -r $Runtime --self-contained true -o $destination
 if ($LASTEXITCODE -ne 0) { throw 'Blindly4 build failed' }
+$repo = Join-Path $PSScriptRoot '..'
+Copy-Item -LiteralPath (Join-Path $repo 'license') -Destination $destination -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $repo 'README.md') -Destination (Join-Path $destination 'README.md') -Force
 Write-Host "Blindly4: $destination/blindly4.exe"
