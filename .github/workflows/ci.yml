@@ -26,4 +26,6 @@ jobs:
             .build/debug/blindly4
             license/LICENSE.md
             license/LICENSING.md
+            README.md
           if-no-files-found: error
+          include-hidden-files: true

@@ -2,3 +2,5 @@
 .DS_Store
 .logs/
 .swiftpm/
+windows/bin/
+windows/obj/
