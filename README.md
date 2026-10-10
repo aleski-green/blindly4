@@ -1,12 +1,19 @@
 # blindly4
 
-Windows support was added in the [fatmahalqaisi-code/blindly4 fork](https://github.com/fatmahalqaisi-code/blindly4). This modified version retains the macOS implementation in the same repository. CI builds and tests macOS, Windows x64 and Windows ARM64.
+Blindly4 supports **macOS 13+ and Windows 10/11** with a shared, stateless CLI and native accessibility backends. CI builds and tests macOS, Windows x64 and Windows ARM64.
+
+| Operating system | Backend | Build requirements |
+| --- | --- | --- |
+| macOS 13+ | Swift / Apple Accessibility | Swift 6; Accessibility permission for desktop access |
+| Windows 10/11, ARM64 and x64 | C# / Microsoft UI Automation | .NET SDK 10 to build; self-contained packages need no separate .NET install |
+
+Windows support was contributed through the [fatmahalqaisi-code/blindly4 fork](https://github.com/fatmahalqaisi-code/blindly4).
 
 `blindly4` inspects and operates the real desktop accessibility tree: Apple Accessibility on macOS and Microsoft UI Automation on Windows. It does **not** control VoiceOver or use `say`.
 
 **Windows 10/11:** see [native Windows builds, commands and tests](windows/README.md). Both ARM64 and x64 are supported. The examples below use the shared CLI; the Swift build and macOS permission instructions apply only to macOS.
 
-## Build
+## Build on macOS
 
 ```sh
 git clone https://github.com/aleski-green/blindly4.git
@@ -16,6 +23,20 @@ swift build -c release
 ```
 
 Enable the terminal application you used to run the command in **System Settings → Privacy & Security → Accessibility**. The command deliberately exits rather than silently producing partial data when permission is unavailable.
+
+## Build on Windows
+
+From PowerShell with Git and .NET SDK 10 installed:
+
+```powershell
+git clone https://github.com/aleski-green/blindly4.git
+cd blindly4
+.\windows\build.ps1
+.\.build\windows\blindly4.exe --self-test
+.\.build\windows\blindly4.exe apps
+```
+
+The build selects the host architecture; pass `-Runtime win-x64` or `-Runtime win-arm64` to choose explicitly. Run desktop commands in the logged-in interactive session. See [Windows commands, safety limits and tests](windows/README.md).
 
 ## Examples
 
@@ -99,7 +120,7 @@ action; it brings that exact accessible element into view without relying on coo
 
 `key --key return` activates the focused control. In a Slack composer, that sends the message, so use it only when the final message is correct.
 
-If a web-based composer filters direct Unicode input, use `blindly4 paste --text 'Hello from blindly4'`. It pastes via Command-V and restores the previous text clipboard after the target app receives the paste.
+If a web-based composer filters direct Unicode input, use `blindly4 paste --text 'Hello from blindly4'`. It pastes via Command-V on macOS or Ctrl-V on Windows and restores the previous clipboard after the target app receives the paste.
 
 For a message that will be sent externally, use the verified form. It requires the intended PID, clears the current AX draft, and refuses success unless the composer's own AX subtree exposes exactly the requested text. It focuses the live AX composer and retains the clipboard until the paste is observed (up to one second), so a delayed web view cannot paste a restored clipboard value. Bind Send to the same exact draft immediately before the action:
 
@@ -178,7 +199,7 @@ empty composer alone does not prove delivery.
 blindly4 is a plain CLI that prints JSON to stdout, so a coding agent drives it by
 running shell commands and reading the result. Nothing else has to be wired up.
 
-Install it once and grant permission:
+On macOS, install it once and grant permission:
 
 ```sh
 swift build -c release
@@ -186,7 +207,9 @@ cp .build/release/blindly4 /usr/local/bin/
 blindly4 request-permission
 ```
 
-Accessibility permission belongs to the process that runs the agent's shell, not to
+On Windows, use the self-contained executable from `.build/windows/` or add its directory to `PATH`; no macOS Accessibility permission setup applies.
+
+On macOS, Accessibility permission belongs to the process that runs the agent's shell, not to
 `blindly4` itself. Grant it to Codex, or to the terminal hosting it, in **System
 Settings → Privacy & Security → Accessibility**. Without it every AX command exits
 `77`.
