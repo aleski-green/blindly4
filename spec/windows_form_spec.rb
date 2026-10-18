@@ -27,7 +27,6 @@ RSpec.describe 'A three-field Windows form', :windows, :live do
       expect_untouched_neighbors
       expect_not_submitted
 
-      # This is a real elapsed delay, with no mocked clock or fixture shortcut.
       sleep 2
       expect(draft_value).to eq(message)
       expect_untouched_neighbors
@@ -83,7 +82,7 @@ RSpec.describe 'A three-field Windows form', :windows, :live do
   %w[press enter].each do |submission|
     it "blocks #{submission} when the second field changes during the delay, even if the first still matches" do
       message = 'original draft'
-      app('set-value', '--path', control('First field', 'AXTextField'), '--value', message)
+      app('set-value', '--path', find_control_path('First field', 'AXTextField'), '--value', message)
       app('paste', '--target-path', draft, '--text', message)
       sleep 1
       set_draft('changed during wait')

@@ -40,7 +40,12 @@ pub fn url(value: &str) -> Result<()> {
     }
     Ok(())
 }
-pub fn draft(writable: bool, focused: bool, exact: bool, frontmost: bool) -> Result<()> {
+pub fn require_matching_draft(
+    writable: bool,
+    focused: bool,
+    exact: bool,
+    frontmost: bool,
+) -> Result<()> {
     if !(writable && focused && exact && frontmost) {
         return Err(Error::access(
             "Input blocked: writable target, keyboard focus, exact draft and foreground PID must all match. Do not send.",

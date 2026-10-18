@@ -1,4 +1,3 @@
-// Preserve Microsoft's names when matching generated UIA constants.
 #![allow(non_upper_case_globals)]
 use crate::{
     error::{Error, Result},
@@ -24,8 +23,7 @@ impl Node {
             automation: unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)? },
         })
     }
-    pub fn with_element(&self, element: IUIAutomationElement) -> Result<Self> {
-        // Fail closed when a stale/cross-process path resolves into another application.
+    pub fn with_same_process_element(&self, element: IUIAutomationElement) -> Result<Self> {
         let observed_pid = unsafe { element.CurrentProcessId()? };
         if observed_pid != self.pid {
             return Err(Error::access(format!(
@@ -44,12 +42,11 @@ impl Node {
             .as_ref()
             .ok_or_else(|| Error::usage("Choose a control path"))
     }
-    fn pattern<T: Interface>(&self, id: UIA_PATTERN_ID) -> Result<Option<T>> {
+    fn available_pattern<T: Interface>(&self, id: UIA_PATTERN_ID) -> Result<Option<T>> {
         let Some(e) = &self.element else {
             return Ok(None);
         };
-        // Availability properties distinguish unsupported patterns from dead providers.
-        let available = match id {
+        let availability_property = match id {
             UIA_InvokePatternId => UIA_IsInvokePatternAvailablePropertyId,
             UIA_SelectionItemPatternId => UIA_IsSelectionItemPatternAvailablePropertyId,
             UIA_TogglePatternId => UIA_IsTogglePatternAvailablePropertyId,
@@ -60,7 +57,7 @@ impl Node {
             _ => return Err(Error::unexpected("Unknown UIA pattern")),
         };
         unsafe {
-            let value = e.GetCurrentPropertyValue(available)?;
+            let value = e.GetCurrentPropertyValue(availability_property)?;
             if !bool::try_from(&value).map_err(Error::from)? {
                 return Ok(None);
             }
@@ -111,10 +108,14 @@ impl Node {
             if e.CurrentIsPassword()?.as_bool() {
                 return Ok(None);
             }
-            if let Some(p) = self.pattern::<IUIAutomationValuePattern>(UIA_ValuePatternId)? {
+            if let Some(p) =
+                self.available_pattern::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
+            {
                 return Ok(Some(p.CurrentValue()?.to_string()));
             }
-            if let Some(p) = self.pattern::<IUIAutomationTextPattern>(UIA_TextPatternId)? {
+            if let Some(p) =
+                self.available_pattern::<IUIAutomationTextPattern>(UIA_TextPatternId)?
+            {
                 return Ok(Some(p.DocumentRange()?.GetText(65536)?.to_string()));
             }
         }
@@ -131,7 +132,7 @@ impl Node {
             {
                 return Ok(false);
             }
-            match self.pattern::<IUIAutomationValuePattern>(UIA_ValuePatternId)? {
+            match self.available_pattern::<IUIAutomationValuePattern>(UIA_ValuePatternId)? {
                 Some(p) => Ok(!p.CurrentIsReadOnly()?.as_bool()),
                 None => Ok(false),
             }
@@ -153,7 +154,9 @@ impl Node {
         Ok(self.value()?.is_some_and(|v| guards::exact(&v, expected)))
     }
     pub fn selected(&self) -> Result<bool> {
-        match self.pattern::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)? {
+        match self
+            .available_pattern::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)?
+        {
             Some(p) => Ok(unsafe { p.CurrentIsSelected()?.as_bool() }),
             None => Ok(false),
         }
@@ -161,25 +164,25 @@ impl Node {
     pub fn actions(&self) -> Result<Vec<&'static str>> {
         let mut actions = vec![];
         if self
-            .pattern::<IUIAutomationInvokePattern>(UIA_InvokePatternId)?
+            .available_pattern::<IUIAutomationInvokePattern>(UIA_InvokePatternId)?
             .is_some()
             || self
-                .pattern::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)?
+                .available_pattern::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)?
                 .is_some()
             || self
-                .pattern::<IUIAutomationTogglePattern>(UIA_TogglePatternId)?
+                .available_pattern::<IUIAutomationTogglePattern>(UIA_TogglePatternId)?
                 .is_some()
         {
             actions.push("AXPress");
         }
         if self
-            .pattern::<IUIAutomationExpandCollapsePattern>(UIA_ExpandCollapsePatternId)?
+            .available_pattern::<IUIAutomationExpandCollapsePattern>(UIA_ExpandCollapsePatternId)?
             .is_some()
         {
             actions.push("AXShowMenu");
         }
         if self
-            .pattern::<IUIAutomationScrollItemPattern>(UIA_ScrollItemPatternId)?
+            .available_pattern::<IUIAutomationScrollItemPattern>(UIA_ScrollItemPatternId)?
             .is_some()
         {
             actions.push("AXScrollToVisible");
@@ -232,47 +235,44 @@ impl Node {
         unsafe {
             if let Some(e) = &self.element {
                 let walker = self.automation.ControlViewWalker()?;
-                let mut child = optional_element(walker.GetFirstChildElement(e))?;
+                let mut child = nullable_uia_element(walker.GetFirstChildElement(e))?;
                 while let Some(current) = child {
                     if children.len() == 10000 {
                         return Err(Error::access(
                             "Control has more than 10000 children; narrow the target",
                         ));
                     }
-                    let parent =
-                        optional_element(walker.GetParentElement(&current))?.ok_or_else(|| {
+                    let parent = nullable_uia_element(walker.GetParentElement(&current))?
+                        .ok_or_else(|| {
                             Error::access(
                                 "Accessibility child lost its parent; rediscover the target",
                             )
                         })?;
-                    let same_parent = self.automation.CompareElements(e, &parent)?.as_bool();
-                    // Win32 combo boxes expose their open popup list as the first
-                    // child, but that list's Control View parent is the desktop.
-                    // Keep that same-process popup, then stop: its next sibling
-                    // belongs to the desktop, not to this combo box.
-                    let popup = children.is_empty()
+                    let has_expected_parent =
+                        self.automation.CompareElements(e, &parent)?.as_bool();
+                    let desktop_parented_combo_popup = children.is_empty()
                         && e.CurrentControlType()? == UIA_ComboBoxControlTypeId
                         && current.CurrentControlType()? == UIA_ListControlTypeId
                         && self
                             .automation
                             .CompareElements(&parent, &self.automation.GetRootElement()?)?
                             .as_bool();
-                    if !same_parent && !popup {
+                    if !has_expected_parent && !desktop_parented_combo_popup {
                         return Err(Error::access(
                             "Accessibility child changed parents; rediscover the target",
                         ));
                     }
-                    children.push(self.with_element(current.clone())?);
-                    if popup {
+                    children.push(self.with_same_process_element(current.clone())?);
+                    if desktop_parented_combo_popup {
                         break;
                     }
-                    child = optional_element(walker.GetNextSiblingElement(&current))?;
+                    child = nullable_uia_element(walker.GetNextSiblingElement(&current))?;
                 }
             } else {
                 for window in native::windows()?.into_iter().filter(|w| w.pid == self.pid) {
-                    children.push(
-                        self.with_element(self.automation.ElementFromHandle(window.handle)?)?,
-                    );
+                    children.push(self.with_same_process_element(
+                        self.automation.ElementFromHandle(window.handle)?,
+                    )?);
                 }
             }
         }
@@ -296,7 +296,7 @@ impl Node {
             ));
         }
         unsafe {
-            self.pattern::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
+            self.available_pattern::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
                 .ok_or_else(|| Error::access("ValuePattern disappeared"))?
                 .SetValue(&BSTR::from(text))?;
         }
@@ -304,14 +304,16 @@ impl Node {
     }
     pub fn press(&self) -> Result<()> {
         unsafe {
-            if let Some(p) = self.pattern::<IUIAutomationInvokePattern>(UIA_InvokePatternId)? {
-                p.Invoke()?;
-            } else if let Some(p) =
-                self.pattern::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)?
+            if let Some(p) =
+                self.available_pattern::<IUIAutomationInvokePattern>(UIA_InvokePatternId)?
             {
+                p.Invoke()?;
+            } else if let Some(p) = self.available_pattern::<IUIAutomationSelectionItemPattern>(
+                UIA_SelectionItemPatternId,
+            )? {
                 p.Select()?;
             } else if let Some(p) =
-                self.pattern::<IUIAutomationTogglePattern>(UIA_TogglePatternId)?
+                self.available_pattern::<IUIAutomationTogglePattern>(UIA_TogglePatternId)?
             {
                 p.Toggle()?;
             } else {
@@ -322,24 +324,24 @@ impl Node {
     }
     pub fn expand(&self) -> Result<()> {
         unsafe {
-            self.pattern::<IUIAutomationExpandCollapsePattern>(UIA_ExpandCollapsePatternId)?
-                .ok_or_else(|| Error::usage("Target does not support AXShowMenu"))?
-                .Expand()?;
+            self.available_pattern::<IUIAutomationExpandCollapsePattern>(
+                UIA_ExpandCollapsePatternId,
+            )?
+            .ok_or_else(|| Error::usage("Target does not support AXShowMenu"))?
+            .Expand()?;
         }
         Ok(())
     }
     pub fn scroll_to(&self) -> Result<()> {
         unsafe {
-            self.pattern::<IUIAutomationScrollItemPattern>(UIA_ScrollItemPatternId)?
+            self.available_pattern::<IUIAutomationScrollItemPattern>(UIA_ScrollItemPatternId)?
                 .ok_or_else(|| Error::usage("Target does not support AXScrollToVisible"))?
                 .ScrollIntoView()?;
         }
         Ok(())
     }
 }
-// windows-rs reports a successful null COM out pointer as Error::empty (S_OK). This is
-// the documented end-of-siblings sentinel; other provider errors must propagate.
-pub(crate) fn optional_element(
+pub(crate) fn nullable_uia_element(
     result: windows::core::Result<IUIAutomationElement>,
 ) -> Result<Option<IUIAutomationElement>> {
     match result {

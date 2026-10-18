@@ -103,10 +103,10 @@ RSpec.describe 'Windows desktop behavior', :windows, :live do
   end
 
   it 'redacts password text and refuses to paste into a password control' do
-    password = control('Password', 'AXSecureTextField')
+    password = find_control_path('Password', 'AXSecureTextField')
     expect(app('inspect', '--path', password)['value']).to be_nil
     expect(app('tree', '--depth', '6').to_json).not_to include('fixture secret')
-    rejected_app(64, 'paste', '--target-path', control('Password', 'AXSecureTextField'), '--text', 'never entered')
+    rejected_app(64, 'paste', '--target-path', find_control_path('Password', 'AXSecureTextField'), '--text', 'never entered')
     expect_not_submitted
   end
 

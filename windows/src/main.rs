@@ -23,17 +23,16 @@ pub fn json(value: &Value) -> Result<()> {
     writeln!(out)?;
     Ok(())
 }
-// UIA uses an MTA, with all interfaces released before uninitializing COM.
-struct Com;
-impl Com {
-    fn initialize() -> Result<Self> {
+struct ComApartment;
+impl ComApartment {
+    fn initialize_multithreaded() -> Result<Self> {
         unsafe {
             CoInitializeEx(None, COINIT_MULTITHREADED).ok()?;
         }
         Ok(Self)
     }
 }
-impl Drop for Com {
+impl Drop for ComApartment {
     fn drop(&mut self) {
         unsafe { CoUninitialize() }
     }
@@ -49,7 +48,7 @@ fn run(args: &[String]) -> Result<()> {
         return json(&command.metadata());
     }
     let invocation = invocation::Invocation::new(command, &args[1..])?;
-    let _com = Com::initialize()?;
+    let _com_apartment = ComApartment::initialize_multithreaded()?;
     native::dpi_awareness();
     (command.execute)(&invocation)
 }

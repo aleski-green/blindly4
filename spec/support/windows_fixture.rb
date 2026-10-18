@@ -1,8 +1,7 @@
 require 'spec_helper'
 
 module WindowsFixture
-  def start_fixture
-    # RSpec command-line tags can override configured exclusions.
+  def start_fixture_with_live_opt_in
     raise 'Live desktop scenarios require Windows and BLINDLY4_LIVE=1' unless Blindly::WINDOWS && ENV['BLINDLY4_LIVE'] == '1'
 
     @fixture_pid = Process.spawn([Blindly::BINARY, Blindly::BINARY], '--test-app',
@@ -26,7 +25,6 @@ module WindowsFixture
     Process.kill('KILL', @fixture_pid)
     Process.waitpid(@fixture_pid)
   rescue Errno::ESRCH, Errno::ECHILD
-    # The fixture may already have exited; never terminate any other process.
   ensure
     @fixture_pid = nil
   end
@@ -43,23 +41,22 @@ module WindowsFixture
     result.json
   end
 
-  # Resolve by the visible label every time; do not cache UI paths across actions.
-  def control(title, role)
+  def find_control_path(title, role)
     matches = app('find', '--title', title, '--role', role, '--depth', '6').fetch('matches')
     expect(matches.length).to eq(1), "Expected one #{role} named #{title}, got #{matches.inspect}"
     matches.first.fetch('path')
   end
 
   def draft
-    control('Draft', 'AXTextField')
+    find_control_path('Draft', 'AXTextField')
   end
 
   def submit
-    control('Submit test draft', 'AXButton')
+    find_control_path('Submit test draft', 'AXButton')
   end
 
   def draft_value
-    app('inspect', '--path', draft).fetch('value')
+    field_value('Draft')
   end
 
   def set_draft(text)
@@ -71,7 +68,7 @@ module WindowsFixture
   end
 
   def field_value(title)
-    app('inspect', '--path', control(title, 'AXTextField')).fetch('value')
+    app('inspect', '--path', find_control_path(title, 'AXTextField')).fetch('value')
   end
 
   def visible_label(prefix)
@@ -79,8 +76,7 @@ module WindowsFixture
       .map { |row| row.fetch('title') }.find { |title| title.start_with?(prefix) }
   end
 
-  # Poll observed UI state, never repeat the action under test.
-  def observe_until(description = 'Expected desktop state')
+  def wait_for_observed_state(description = 'Expected desktop state')
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
     loop do
       observed = yield
@@ -91,7 +87,7 @@ module WindowsFixture
   end
 
   def expect_label(text)
-    observe_until("Visible label #{text.inspect}") { visible_label(text) == text }
+    wait_for_observed_state("Visible label #{text.inspect}") { visible_label(text) == text }
   end
 
   def expect_untouched_neighbors
@@ -104,16 +100,13 @@ RSpec.shared_context 'a native Windows fixture' do
   include WindowsFixture
 
   around do |example|
-    begin
-      start_fixture
-      example.run
-      if example.exception
-        # Read only this disposable fixture, to explain focus/draft failures.
-        RSpec.configuration.reporter.message("Fixture focus: #{cli('focused', '--pid', @fixture_pid).stdout.strip}")
-        RSpec.configuration.reporter.message("Fixture draft: #{cli('find', '--pid', @fixture_pid, '--title', 'Draft', '--role', 'AXTextField').stdout.strip}")
-      end
-    ensure
-      stop_fixture
+    start_fixture_with_live_opt_in
+    example.run
+    if example.exception
+      RSpec.configuration.reporter.message("Fixture focus: #{cli('focused', '--pid', @fixture_pid).stdout.strip}")
+      RSpec.configuration.reporter.message("Fixture draft: #{cli('find', '--pid', @fixture_pid, '--title', 'Draft', '--role', 'AXTextField').stdout.strip}")
     end
+  ensure
+    stop_fixture
   end
 end

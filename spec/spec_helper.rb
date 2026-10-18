@@ -15,7 +15,6 @@ module Blindly
   end
 
   def cli(*arguments)
-    # An argv array preserves Unicode and empty strings without involving a shell.
     Open3.popen3([BINARY, BINARY], *arguments.map(&:to_s), chdir: ROOT) do |input, output, error, child|
       input.close
       readers = [output, error].map { |stream| Thread.new { stream.read.force_encoding(Encoding::UTF_8) } }
@@ -47,7 +46,6 @@ module Blindly
     if WINDOWS
       expect(result.json).to include('code' => 'usage_error', 'error' => a_string_matching(/\S/))
     else
-      # The existing macOS usage contract is human-readable stderr.
       expect(result.stdout).to eq('')
       expect(result.stderr).to match(/\S/)
     end

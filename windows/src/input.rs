@@ -37,7 +37,7 @@ pub fn key(i: &Invocation) -> Result<()> {
     let pid = target(i)?;
     if let Some(path) = i.optional("target-path") {
         let node = Desktop::new(pid)?.resolve(path)?;
-        guards::draft(
+        guards::require_matching_draft(
             node.writable()?,
             node.has_focus()?,
             node.exact_draft(i.value("require-value")?)?,
@@ -95,9 +95,7 @@ pub fn paste(i: &Invocation) -> Result<()> {
             ));
         }
     }
-    // Freeze every clipboard format before clearing any existing draft. A format
-    // that cannot be copied aborts before changing either clipboard or target.
-    let mut clipboard = Clipboard::capture()?;
+    let mut clipboard = Clipboard::capture_all_formats()?;
     native::activate(pid)?;
     if let Some(node) = &node {
         node.set_value("")?;
@@ -107,7 +105,7 @@ pub fn paste(i: &Invocation) -> Result<()> {
             ));
         }
         node.focus()?;
-        guards::draft(
+        guards::require_matching_draft(
             node.writable()?,
             node.has_focus()?,
             node.exact_draft("")?,
@@ -117,7 +115,7 @@ pub fn paste(i: &Invocation) -> Result<()> {
     clipboard.replace(text)?;
     let outcome = (|| -> Result<()> {
         if let Some(node) = &node {
-            guards::draft(
+            guards::require_matching_draft(
                 node.writable()?,
                 node.has_focus()?,
                 node.exact_draft("")?,

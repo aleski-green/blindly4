@@ -56,8 +56,7 @@ pub fn tree(i: &Invocation) -> Result<()> {
     let tree = build(&desktop.root, depth, &mut remaining, &mut truncated)?;
     crate::json(&json!({"tree": tree, "truncated": truncated}))
 }
-// Iterative traversal keeps both depth and visited-node bounds explicit.
-fn walk(
+fn walk_bounded_depth_first(
     root: Node,
     depth: i32,
     mut visit: impl FnMut(&Node, &str) -> Result<bool>,
@@ -87,7 +86,7 @@ fn walk(
 }
 pub fn show(i: &Invocation) -> Result<()> {
     let depth = i.integer("depth", 4, 0, 64)?;
-    let truncated = walk(Desktop::new(i.pid()?)?.root, depth, |node, path| {
+    let truncated = walk_bounded_depth_first(Desktop::new(i.pid()?)?.root, depth, |node, path| {
         let row = node.detail(None)?;
         println!(
             "{path:<18} {} {} {}",
@@ -115,7 +114,7 @@ pub fn find(i: &Invocation) -> Result<()> {
     let limit = i.integer("limit", 25, 1, 10000)? as usize;
     let depth = i.integer("depth", 8, 0, 64)?;
     let mut matches = vec![];
-    let truncated = walk(Desktop::new(i.pid()?)?.root, depth, |node, path| {
+    let truncated = walk_bounded_depth_first(Desktop::new(i.pid()?)?.root, depth, |node, path| {
         let row = node.detail(Some(path))?;
         if filters
             .iter()
@@ -139,7 +138,9 @@ pub fn focused(i: &Invocation) -> Result<()> {
     }
     let root = Node::root(pid)?;
     let element = unsafe { root.automation.GetFocusedElement() }.map_err(|_| unavailable())?;
-    let node = root.with_element(element).map_err(|_| unavailable())?;
+    let node = root
+        .with_same_process_element(element)
+        .map_err(|_| unavailable())?;
     crate::json(&node.detail(None)?)
 }
 pub fn mutate(

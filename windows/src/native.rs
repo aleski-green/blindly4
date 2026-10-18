@@ -37,16 +37,18 @@ pub fn foreground_pid() -> i32 {
     window_pid(unsafe { GetForegroundWindow() })
 }
 pub fn windows() -> Result<Vec<Window>> {
-    unsafe extern "system" fn visit(handle: HWND, param: LPARAM) -> BOOL {
-        // EnumWindows calls this synchronously; the Vec remains alive for the call.
+    unsafe extern "system" fn collect_visible_window(
+        handle: HWND,
+        windows_pointer: LPARAM,
+    ) -> BOOL {
         unsafe {
             if IsWindowVisible(handle).as_bool() {
                 let mut title = [0u16; 1024];
                 let length = GetWindowTextW(handle, &mut title) as usize;
                 let pid = window_pid(handle);
                 if pid > 0 && length > 0 {
-                    let result = &mut *(param.0 as *mut Vec<Window>);
-                    result.push(Window {
+                    let visible_windows = &mut *(windows_pointer.0 as *mut Vec<Window>);
+                    visible_windows.push(Window {
                         handle,
                         pid,
                         title: String::from_utf16_lossy(&title[..length]),
@@ -56,12 +58,15 @@ pub fn windows() -> Result<Vec<Window>> {
         }
         BOOL(1)
     }
-    let mut result = Vec::<Window>::new();
+    let mut visible_windows = Vec::<Window>::new();
     unsafe {
-        EnumWindows(Some(visit), LPARAM(&mut result as *mut _ as isize))?;
+        EnumWindows(
+            Some(collect_visible_window),
+            LPARAM(&mut visible_windows as *mut _ as isize),
+        )?;
     }
-    result.sort_by_key(|w| w.handle.0 as isize);
-    Ok(result)
+    visible_windows.sort_by_key(|window| window.handle.0 as isize);
+    Ok(visible_windows)
 }
 pub fn process_name(pid: i32) -> String {
     unsafe {

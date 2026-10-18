@@ -1,4 +1,3 @@
-//! Harmless native Win32 fixture driven by the RSpec desktop behavior suite.
 use crate::{
     error::{Error, Result},
     native,
@@ -18,8 +17,7 @@ use windows::{
 const FIRST: i32 = 108;
 const DRAFT: i32 = 101;
 const THIRD: i32 = 110;
-// IDOK is also the default action used by Windows dialog keyboard navigation.
-const SUBMIT: i32 = 1;
+const SUBMIT: i32 = IDOK.0;
 const RESULT: i32 = 103;
 const CHECKBOX: i32 = 105;
 const COMBO: i32 = 201;
@@ -29,32 +27,30 @@ const COMBO_STATUS: i32 = 302;
 const SCROLL_STATUS: i32 = 303;
 const SEND_COUNT: i32 = 304;
 const READY: i32 = 305;
+const SELECT_EDIT_TEXT_MESSAGE: u32 = 0x00b1;
 
-unsafe fn window_text(window: HWND) -> String {
+unsafe fn read_window_text(window: HWND) -> String {
     unsafe {
         let mut text = vec![0u16; GetWindowTextLengthW(window) as usize + 1];
         let count = GetWindowTextW(window, &mut text);
         String::from_utf16_lossy(&text[..count as usize])
     }
 }
-unsafe fn label(window: HWND, id: i32, text: &str) {
+unsafe fn set_label_text(window: HWND, id: i32, text: &str) {
     unsafe {
         if let Ok(control) = GetDlgItem(Some(window), id) {
-            // Avoid continuously replacing unchanged accessible text.
-            if window_text(control) != text {
+            if read_window_text(control) != text {
                 let wide = native::wide(text);
                 let _ = SetWindowTextW(control, PCWSTR(wide.as_ptr()));
             }
         }
     }
 }
-// Visible status labels let a human or an accessibility client observe the
-// controls. This fixture contains no test assertions or automation shortcuts.
-unsafe fn refresh_status(window: HWND) {
+unsafe fn refresh_control_status(window: HWND) {
     unsafe {
-        if let Ok(control) = GetDlgItem(Some(window), CHECKBOX) {
-            let checked = SendMessageW(control, BM_GETCHECK, None, None).0 != 0;
-            label(
+        if let Ok(checkbox) = GetDlgItem(Some(window), CHECKBOX) {
+            let checked = SendMessageW(checkbox, BM_GETCHECK, None, None).0 != 0;
+            set_label_text(
                 window,
                 CHECK_STATUS,
                 if checked {
@@ -64,10 +60,10 @@ unsafe fn refresh_status(window: HWND) {
                 },
             );
         }
-        if let Ok(control) = GetDlgItem(Some(window), COMBO) {
-            let open = SendMessageW(control, CB_GETDROPPEDSTATE, None, None).0 != 0;
-            let selection = SendMessageW(control, CB_GETCURSEL, None, None).0;
-            label(
+        if let Ok(combo) = GetDlgItem(Some(window), COMBO) {
+            let open = SendMessageW(combo, CB_GETDROPPEDSTATE, None, None).0 != 0;
+            let selection = SendMessageW(combo, CB_GETCURSEL, None, None).0;
+            set_label_text(
                 window,
                 COMBO_STATUS,
                 &format!(
@@ -77,15 +73,15 @@ unsafe fn refresh_status(window: HWND) {
                 ),
             );
         }
-        if let Ok(control) = GetDlgItem(Some(window), LIST) {
-            let top = SendMessageW(control, LB_GETTOPINDEX, None, None).0;
-            label(
+        if let Ok(list) = GetDlgItem(Some(window), LIST) {
+            let top = SendMessageW(list, LB_GETTOPINDEX, None, None).0;
+            set_label_text(
                 window,
                 SCROLL_STATUS,
                 &format!("First visible option: {:02}", top + 1),
             );
         }
-        label(window, READY, "Fixture ready");
+        set_label_text(window, READY, "Fixture ready");
     }
 }
 unsafe extern "system" fn procedure(
@@ -96,25 +92,27 @@ unsafe extern "system" fn procedure(
 ) -> LRESULT {
     unsafe {
         match message {
-            // A regular window supplies the default-button ID explicitly when
-            // using IsDialogMessage instead of DefDlgProc.
             DM_GETDEFID => LRESULT(((DC_HASDEFID << 16) | SUBMIT as u32) as isize),
             WM_COMMAND if (wparam.0 & 0xffff) == SUBMIT as usize => {
-                if let Ok(edit) = GetDlgItem(Some(window), DRAFT) {
-                    label(window, RESULT, &format!("Submitted: {}", window_text(edit)));
+                if let Ok(draft) = GetDlgItem(Some(window), DRAFT) {
+                    set_label_text(
+                        window,
+                        RESULT,
+                        &format!("Submitted: {}", read_window_text(draft)),
+                    );
                     let count = GetWindowLongPtrW(window, GWLP_USERDATA) + 1;
                     SetWindowLongPtrW(window, GWLP_USERDATA, count);
-                    label(window, SEND_COUNT, &format!("Submission count: {count}"));
+                    set_label_text(window, SEND_COUNT, &format!("Submission count: {count}"));
                 }
                 LRESULT(0)
             }
             WM_TIMER => {
-                refresh_status(window);
+                refresh_control_status(window);
                 LRESULT(0)
             }
             WM_SETFOCUS => {
-                if let Ok(edit) = GetDlgItem(Some(window), DRAFT) {
-                    let _ = SetFocus(Some(edit));
+                if let Ok(draft) = GetDlgItem(Some(window), DRAFT) {
+                    let _ = SetFocus(Some(draft));
                 }
                 LRESULT(0)
             }
@@ -154,176 +152,99 @@ pub fn run() -> Result<()> {
             Some(instance),
             None,
         )?;
-        // Claim initial foreground ownership before populating the large list.
         let _ = ShowWindow(window, SW_SHOW);
         let _ = SetForegroundWindow(window);
-        let control =
-            |class: PCWSTR, title: PCWSTR, style: WINDOW_STYLE, x, y, width, height, id: i32| {
-                CreateWindowExW(
-                    WINDOW_EX_STYLE::default(),
-                    class,
-                    title,
-                    WS_CHILD | WS_VISIBLE | style,
-                    x,
-                    y,
-                    width,
-                    height,
-                    Some(window),
-                    Some(HMENU(id as usize as *mut _)),
-                    Some(instance),
-                    None,
+        let create_control = |class: PCWSTR,
+                              title: &str,
+                              style: WINDOW_STYLE,
+                              [x, y, width, height]: [i32; 4],
+                              id: i32| {
+            let title = native::wide(title);
+            CreateWindowExW(
+                WINDOW_EX_STYLE::default(),
+                class,
+                PCWSTR(title.as_ptr()),
+                WS_CHILD | WS_VISIBLE | style,
+                x,
+                y,
+                width,
+                height,
+                Some(window),
+                Some(HMENU(id as usize as *mut _)),
+                Some(instance),
+                None,
+            )
+        };
+        let create_caption = |title: &str, bounds, id| {
+            create_control(w!("STATIC"), title, WINDOW_STYLE::default(), bounds, id)
+        };
+        let create_text_field =
+            |title: &str, value: &str, [caption_id, field_id]: [i32; 2], y, extra_style| {
+                create_caption(title, [20, y, 390, 20], caption_id)?;
+                create_control(
+                    w!("EDIT"),
+                    value,
+                    WS_TABSTOP | WS_BORDER | extra_style,
+                    [20, y + 20, 390, 28],
+                    field_id,
                 )
             };
-        control(
-            w!("STATIC"),
-            w!("Local accessibility test — no external actions"),
-            WINDOW_STYLE::default(),
-            20,
-            10,
-            730,
-            20,
+        create_caption(
+            "Local accessibility test — no external actions",
+            [20, 10, 730, 20],
             100,
         )?;
-        // Preceding labels name the three ordinary text fields. Draft is second
-        // in both visual order and the accessibility tree.
-        control(
-            w!("STATIC"),
-            w!("First field"),
-            WINDOW_STYLE::default(),
-            20,
+        let first = create_text_field(
+            "First field",
+            "first untouched",
+            [109, FIRST],
             35,
-            390,
-            20,
-            109,
-        )?;
-        let first = control(
-            w!("EDIT"),
-            w!("first untouched"),
-            WS_TABSTOP | WS_BORDER,
-            20,
-            55,
-            390,
-            28,
-            FIRST,
-        )?;
-        control(
-            w!("STATIC"),
-            w!("Draft"),
             WINDOW_STYLE::default(),
-            20,
+        )?;
+        let draft = create_text_field(
+            "Draft",
+            "",
+            [104, DRAFT],
             90,
-            390,
-            20,
-            104,
+            WINDOW_STYLE(ES_AUTOHSCROLL as u32),
         )?;
-        let edit = control(
-            w!("EDIT"),
-            w!(""),
-            WS_TABSTOP | WS_BORDER | WINDOW_STYLE(ES_AUTOHSCROLL as u32),
-            20,
-            110,
-            390,
-            28,
-            DRAFT,
-        )?;
-        control(
-            w!("STATIC"),
-            w!("Third field"),
-            WINDOW_STYLE::default(),
-            20,
+        let third = create_text_field(
+            "Third field",
+            "third untouched",
+            [111, THIRD],
             195,
-            390,
-            20,
-            111,
+            WINDOW_STYLE::default(),
         )?;
-        let third = control(
-            w!("EDIT"),
-            w!("third untouched"),
-            WS_TABSTOP | WS_BORDER,
-            20,
-            215,
-            390,
-            28,
-            THIRD,
-        )?;
-        control(
+        create_control(
             w!("BUTTON"),
-            w!("Submit test draft"),
+            "Submit test draft",
             WS_TABSTOP | WINDOW_STYLE(BS_DEFPUSHBUTTON as u32),
-            20,
-            255,
-            180,
-            32,
+            [20, 255, 180, 32],
             SUBMIT,
         )?;
-        control(
+        create_control(
             w!("BUTTON"),
-            w!("Test checkbox"),
+            "Test checkbox",
             WS_TABSTOP | WINDOW_STYLE(BS_AUTOCHECKBOX as u32),
-            215,
-            255,
-            195,
-            32,
+            [215, 255, 195, 32],
             CHECKBOX,
         )?;
-        control(
-            w!("STATIC"),
-            w!("Not submitted"),
-            WINDOW_STYLE::default(),
-            20,
-            300,
-            390,
-            40,
-            RESULT,
-        )?;
-        control(
-            w!("STATIC"),
-            w!("Submission count: 0"),
-            WINDOW_STYLE::default(),
-            20,
-            345,
-            390,
-            20,
-            SEND_COUNT,
-        )?;
-        control(
-            w!("STATIC"),
-            w!("Password"),
-            WINDOW_STYLE::default(),
-            20,
-            375,
-            100,
-            20,
-            106,
-        )?;
-        control(
+        create_caption("Not submitted", [20, 300, 390, 40], RESULT)?;
+        create_caption("Submission count: 0", [20, 345, 390, 20], SEND_COUNT)?;
+        create_caption("Password", [20, 375, 100, 20], 106)?;
+        create_control(
             w!("EDIT"),
-            w!("fixture secret"),
+            "fixture secret",
             WS_BORDER | WINDOW_STYLE(ES_PASSWORD as u32),
-            125,
-            375,
-            285,
-            25,
+            [125, 375, 285, 25],
             107,
         )?;
-        control(
-            w!("STATIC"),
-            w!("Delivery choice"),
-            WINDOW_STYLE::default(),
-            445,
-            35,
-            300,
-            20,
-            203,
-        )?;
-        let combo = control(
+        create_caption("Delivery choice", [445, 35, 300, 20], 203)?;
+        let combo = create_control(
             w!("COMBOBOX"),
-            w!(""),
+            "",
             WS_TABSTOP | WS_VSCROLL | WINDOW_STYLE(CBS_DROPDOWNLIST as u32),
-            445,
-            55,
-            300,
-            180,
+            [445, 55, 300, 180],
             COMBO,
         )?;
         for text in ["Choice one", "Choice two", "Choice three"] {
@@ -336,24 +257,12 @@ pub fn run() -> Result<()> {
             );
         }
         SendMessageW(combo, CB_SETCURSEL, Some(WPARAM(0)), None);
-        control(
-            w!("STATIC"),
-            w!("Scrollable options"),
-            WINDOW_STYLE::default(),
-            445,
-            110,
-            300,
-            20,
-            204,
-        )?;
-        let list = control(
+        create_caption("Scrollable options", [445, 110, 300, 20], 204)?;
+        let list = create_control(
             w!("LISTBOX"),
-            w!(""),
+            "",
             WS_TABSTOP | WS_BORDER | WS_VSCROLL | WINDOW_STYLE(LBS_NOTIFY as u32),
-            445,
-            135,
-            300,
-            260,
+            [445, 135, 300, 260],
             LIST,
         )?;
         for index in 1..=80 {
@@ -371,24 +280,14 @@ pub fn run() -> Result<()> {
             (SCROLL_STATUS, 485, "First visible option: 01"),
             (READY, 515, "Starting fixture"),
         ] {
-            let text = native::wide(text);
-            control(
-                w!("STATIC"),
-                PCWSTR(text.as_ptr()),
-                WINDOW_STYLE::default(),
-                20,
-                y,
-                730,
-                22,
-                id,
-            )?;
+            create_caption(text, [20, y, 730, 22], id)?;
         }
         if SetTimer(Some(window), 1, 50, None) == 0 {
             return Err(Error::access("Cannot start fixture status timer"));
         }
         let _ = ShowWindow(window, SW_SHOW);
         let _ = SetForegroundWindow(window);
-        let _ = SetFocus(Some(edit));
+        let _ = SetFocus(Some(draft));
         let mut message = MSG::default();
         loop {
             let status = GetMessageW(&mut message, None, 0, 0).0;
@@ -398,22 +297,19 @@ pub fn run() -> Result<()> {
             if status == 0 {
                 break;
             }
-            // Supply conventional select-all in native EDIT controls.
-            if [first, edit, third].contains(&message.hwnd)
+            if [first, draft, third].contains(&message.hwnd)
                 && message.message == WM_KEYDOWN
                 && message.wParam.0 == b'A' as usize
                 && GetKeyState(VK_CONTROL.0 as i32) < 0
             {
                 SendMessageW(
                     message.hwnd,
-                    0x00b1, /* EM_SETSEL */
+                    SELECT_EDIT_TEXT_MESSAGE,
                     Some(WPARAM(0)),
                     Some(LPARAM(-1)),
                 );
                 continue;
             }
-            // Standard dialog navigation handles Enter/default-button submission,
-            // Tab focus, dropdown keys, and Space on a focused native button.
             if !IsDialogMessageW(window, &message).as_bool() {
                 let _ = TranslateMessage(&message);
                 DispatchMessageW(&message);

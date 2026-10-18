@@ -13,8 +13,8 @@ use windows::{
     core::w,
 };
 
-struct Lock;
-impl Lock {
+struct ClipboardLock;
+impl ClipboardLock {
     fn open(owner: HWND) -> Result<Self> {
         for _ in 0..20 {
             if unsafe { OpenClipboard(Some(owner)) }.is_ok() {
@@ -25,21 +25,19 @@ impl Lock {
         Err(Error::access("Clipboard is busy; input was not attempted"))
     }
 }
-impl Drop for Lock {
+impl Drop for ClipboardLock {
     fn drop(&mut self) {
         unsafe {
             let _ = CloseClipboard();
         }
     }
 }
-struct Format {
+struct OwnedClipboardFormat {
     id: u32,
     handle: HANDLE,
 }
-impl Format {
+impl OwnedClipboardFormat {
     fn copy(id: u32, handle: HANDLE) -> Result<Self> {
-        // Private formats have application-defined handle ownership. Refuse them
-        // before changing the clipboard rather than silently losing user data.
         if (0x200..=0x2ff).contains(&id) || id == 0x80 {
             return Err(Error::access(
                 "Clipboard contains an owner-managed format that cannot be safely preserved",
@@ -83,16 +81,15 @@ impl Format {
         }
         Ok(format)
     }
-    fn publish(&mut self) -> Result<()> {
+    fn transfer_to_clipboard(&mut self) -> Result<()> {
         unsafe {
             SetClipboardData(self.id, Some(self.handle))?;
         }
-        // The clipboard now owns this handle; do not free it in Drop.
         self.handle = HANDLE::default();
         Ok(())
     }
 }
-impl Drop for Format {
+impl Drop for OwnedClipboardFormat {
     fn drop(&mut self) {
         if self.handle.is_invalid() {
             return;
@@ -124,12 +121,12 @@ impl Drop for Format {
 
 pub struct Clipboard {
     owner: HWND,
-    formats: Vec<Format>,
-    captured: u32,
-    replacement: Option<u32>,
+    formats: Vec<OwnedClipboardFormat>,
+    captured_sequence: u32,
+    replacement_sequence: Option<u32>,
 }
 impl Clipboard {
-    pub fn capture() -> Result<Self> {
+    pub fn capture_all_formats() -> Result<Self> {
         let owner = unsafe {
             CreateWindowExW(
                 WINDOW_EX_STYLE::default(),
@@ -149,10 +146,10 @@ impl Clipboard {
         let mut clipboard = Self {
             owner,
             formats: vec![],
-            captured: 0,
-            replacement: None,
+            captured_sequence: 0,
+            replacement_sequence: None,
         };
-        let _lock = Lock::open(owner)?;
+        let _lock = ClipboardLock::open(owner)?;
         let mut id = 0;
         loop {
             unsafe {
@@ -166,15 +163,17 @@ impl Clipboard {
                 break;
             }
             let handle = unsafe { GetClipboardData(id)? };
-            clipboard.formats.push(Format::copy(id, handle)?);
+            clipboard
+                .formats
+                .push(OwnedClipboardFormat::copy(id, handle)?);
         }
-        clipboard.captured = unsafe { GetClipboardSequenceNumber() };
+        clipboard.captured_sequence = unsafe { GetClipboardSequenceNumber() };
         Ok(clipboard)
     }
     pub fn replace(&mut self, text: &str) -> Result<()> {
-        let mut replacement = Format::text(text)?;
-        let _lock = Lock::open(self.owner)?;
-        if unsafe { GetClipboardSequenceNumber() } != self.captured {
+        let mut replacement = OwnedClipboardFormat::text(text)?;
+        let _lock = ClipboardLock::open(self.owner)?;
+        if unsafe { GetClipboardSequenceNumber() } != self.captured_sequence {
             return Err(Error::access(
                 "Clipboard changed before paste; input blocked",
             ));
@@ -182,27 +181,25 @@ impl Clipboard {
         unsafe {
             EmptyClipboard()?;
         }
-        let result = replacement.publish();
-        self.replacement = Some(unsafe { GetClipboardSequenceNumber() });
+        let result = replacement.transfer_to_clipboard();
+        self.replacement_sequence = Some(unsafe { GetClipboardSequenceNumber() });
         result
     }
     pub fn restore(&mut self) -> Result<()> {
-        let Some(sequence) = self.replacement else {
+        let Some(sequence) = self.replacement_sequence else {
             return Ok(());
         };
-        let _lock = Lock::open(self.owner)?;
-        // Test while holding the clipboard lock so a concurrent copy cannot be
-        // overwritten between the sequence check and EmptyClipboard.
+        let _lock = ClipboardLock::open(self.owner)?;
         if unsafe { GetClipboardSequenceNumber() } != sequence {
-            self.replacement = None;
+            self.replacement_sequence = None;
             return Ok(());
         }
         unsafe {
             EmptyClipboard()?;
         }
-        self.replacement = None;
+        self.replacement_sequence = None;
         for format in &mut self.formats {
-            format.publish()?;
+            format.transfer_to_clipboard()?;
         }
         Ok(())
     }
