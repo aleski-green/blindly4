@@ -31,8 +31,14 @@ pub fn request_permission() -> Value {
     json!({"trusted": trusted, "message": if trusted { "Accessibility access is enabled." } else { "A permission prompt was requested. Enable your terminal in System Settings, then rerun the command." }})
 }
 pub fn wait(seconds: f64) {
+    // NSRunLoop may return early when it has no pending sources. Keep Quartz
+    // events and their source alive for the entire dispatch interval even then.
+    let duration = std::time::Duration::from_secs_f64(seconds);
+    let start = std::time::Instant::now();
     NSRunLoop::currentRunLoop().runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(seconds));
+    std::thread::sleep(duration.saturating_sub(start.elapsed()));
 }
+
 pub fn foreground_pid() -> i32 {
     // NSWorkspace refreshes running-application properties on the main run loop.
     // Pump it before every check so a mid-command focus change cannot use a

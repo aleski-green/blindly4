@@ -129,4 +129,18 @@ RSpec.describe 'A native macOS form', :macos, :live do
     expect_not_submitted
   end
 
+
+  it 'delivers every Unicode event from successive short-lived typing processes' do
+    10.times do |index|
+      message = "#{index}: " + ('abcdefghij مرحبا café 🪟 ' * 3)
+      set_draft('')
+      app('focus', '--path', draft)
+      result = app('type', '--text', message)
+      expect(result.fetch('characters')).to eq(message.scan(/\X/).length)
+      expect(draft_value).to eq(message)
+    end
+    expect_untouched_neighbors
+    expect_not_submitted
+  end
+
 end
