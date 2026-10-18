@@ -1,6 +1,6 @@
 # Blindly4 on Windows
 
-The Windows implementation is a native Rust CLI backed by Microsoft UI Automation and Win32 SendInput through Microsoft's `windows` crate. It preserves the stateless schema-version-2 verbs, JSON keys, exit codes, command risk classifications, AX-style roles, and guarded draft checks used by Sapiens4. The Swift/macOS implementation remains available, with both platforms tested through RSpec.
+The Windows implementation is a native Rust CLI backed by Microsoft UI Automation and Win32 SendInput through Microsoft's `windows` crate. It preserves the stateless schema-version-2 verbs, JSON keys, exit codes, command risk classifications, AX-style roles, and guarded draft checks used by Sapiens4. The macOS implementation also uses Rust with Apple Accessibility; both platforms are tested through RSpec.
 
 ## Build and run
 

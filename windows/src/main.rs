@@ -1,12 +1,17 @@
 mod clipboard;
+#[path = "../../shared/desktop.rs"]
 mod desktop;
+#[path = "../../shared/error.rs"]
 mod error;
 mod fixture;
+#[path = "../../shared/guards.rs"]
 mod guards;
 mod input;
+#[path = "../../shared/invocation.rs"]
 mod invocation;
 mod native;
 mod node;
+#[path = "../../shared/registry.rs"]
 mod registry;
 
 use error::Result;

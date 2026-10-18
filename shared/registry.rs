@@ -37,7 +37,7 @@ impl Command {
     }
 }
 macro_rules! command {
-    ($name:literal, $args:expr, $summary:literal, $risk:literal, $access:literal, $execute:expr) => {
+    ($name:literal, $args:expr, $summary:expr, $risk:literal, $access:literal, $execute:expr) => {
         Command {
             name: $name,
             arguments: $args,
@@ -53,26 +53,18 @@ pub static ALL: &[Command] = &[
     command!(
         "schema",
         "",
-        "Print command metadata. Windows UIA retains AX role/action names for compatibility.",
+        native::SCHEMA_SUMMARY,
         "read-only",
         false,
-        |_| {
-            crate::json(
-                &json!({"schemaVersion": 2, "platform": "windows", "backend": "UIAutomation", "commands": ALL.iter().map(Command::metadata).collect::<Vec<_>>()}),
-            )
-        }
+        |_| { crate::json(&native::schema(ALL.iter().map(Command::metadata).collect())) }
     ),
     command!(
         "request-permission",
         "",
-        "Windows UI Automation needs no macOS permission. Elevated and secure desktops remain inaccessible.",
+        native::PERMISSION_SUMMARY,
         "ui-mutation",
         false,
-        |_| {
-            crate::json(
-                &json!({"trusted": true, "platform": "windows", "note": "Available on the current interactive desktop at the same integrity level. Does not elevate or change permissions."}),
-            )
-        }
+        |_| crate::json(&native::request_permission())
     ),
     command!(
         "apps",
@@ -92,7 +84,7 @@ pub static ALL: &[Command] = &[
             i.value("pid")?;
             let pid = i.pid()?;
             native::activate(pid)?;
-            crate::json(&json!({"pid": pid, "ok": true}))
+            crate::json(&json!({"pid": native::activation_pid(pid), "ok": true}))
         }
     ),
     command!(
@@ -197,7 +189,7 @@ pub static ALL: &[Command] = &[
     command!(
         "set-value",
         "--path INDEX[.INDEX...] [--pid PID] --value TEXT",
-        "Set a writable ValuePattern.",
+        native::VALUE_SUMMARY,
         "ui-mutation",
         true,
         |i| {
@@ -261,7 +253,7 @@ pub fn get(name: &str) -> Result<&'static Command> {
 }
 pub fn help() -> String {
     format!(
-        "Blindly4 for Windows — native UI Automation, stateless CLI\n{}\nGlobal: --profile. Paths are live: rediscover before input. Serialize desktop workflows.",
+        "Blindly4 — native accessibility, stateless CLI\n{}\nGlobal: --profile. Paths are live: rediscover before input. Serialize desktop workflows.",
         ALL.iter()
             .map(|c| format!(
                 "  {} {}\n    {} [{}]",

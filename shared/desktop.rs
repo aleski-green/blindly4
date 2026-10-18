@@ -91,10 +91,19 @@ pub fn find(i: &Invocation) -> Result<()> {
     let mut matches = vec![];
     let truncated = walk_bounded_depth_first(Node::application(i.pid()?)?, depth, |node, path| {
         let row = node.detail(Some(path))?;
-        if filters
-            .iter()
-            .all(|(k, v)| row[*k].as_str().unwrap_or("").to_lowercase().contains(v))
-        {
+        if filters.iter().all(|(k, v)| {
+            let actual = row[*k].as_str().unwrap_or("");
+            if cfg!(target_os = "macos") && *k == "role" {
+                let expected = if v.starts_with("ax") {
+                    v.clone()
+                } else {
+                    format!("ax{v}")
+                };
+                actual.to_lowercase() == expected
+            } else {
+                actual.to_lowercase().contains(v)
+            }
+        }) {
             matches.push(row);
         }
         Ok(matches.len() < limit)
@@ -121,7 +130,12 @@ pub fn mutate(
 ) -> Result<()> {
     let path = i.value("path")?;
     mutate(&Node::application(i.pid()?)?.resolve(path)?)?;
-    crate::json(&json!({"path": path, "action": action, "ok": true}))
+    let key = if cfg!(target_os = "macos") && matches!(action, "AXFocused" | "AXValue") {
+        "attribute"
+    } else {
+        "action"
+    };
+    crate::json(&json!({"path": path, key: action, "ok": true}))
 }
 pub fn press(i: &Invocation) -> Result<()> {
     i.pair("require-value-path", "require-value", false)?;
@@ -149,6 +163,10 @@ pub fn press(i: &Invocation) -> Result<()> {
                 "Press blocked: the draft does not exactly match --require-value",
             ));
         }
+    }
+    #[cfg(target_os = "macos")]
+    if !target.same(&root.resolve(path)?) {
+        return Err(Error::access("Press target path changed; rediscover it"));
     }
     target.press()?;
     if i.has("require-selected") {

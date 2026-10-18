@@ -243,3 +243,18 @@ pub fn open_url(url: &str) -> Result<()> {
     }
     Ok(())
 }
+
+pub fn schema(commands: Vec<serde_json::Value>) -> serde_json::Value {
+    serde_json::json!({"schemaVersion": 2, "platform": "windows", "backend": "UIAutomation", "commands": commands})
+}
+pub fn activation_pid(pid: i32) -> serde_json::Value {
+    serde_json::json!(pid)
+}
+pub fn request_permission() -> serde_json::Value {
+    serde_json::json!({"trusted": true, "platform": "windows", "note": "Available on the current interactive desktop at the same integrity level. Does not elevate or change permissions."})
+}
+
+pub const SCHEMA_SUMMARY: &str =
+    "Print command metadata. Windows UIA retains AX role/action names for compatibility.";
+pub const PERMISSION_SUMMARY: &str = "Windows UI Automation needs no macOS permission. Elevated and secure desktops remain inaccessible.";
+pub const VALUE_SUMMARY: &str = "Set a writable ValuePattern.";

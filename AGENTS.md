@@ -2,15 +2,15 @@
 
 ## Purpose
 
-blindly4 has a macOS Swift implementation and a Windows Rust implementation for reading and operating the accessibility
+blindly4 has native macOS and Windows Rust implementations for reading and operating the accessibility
 tree. It does not control VoiceOver. Most commands return JSON so programs and coding
 agents can consume them safely.
 
 ## Build and validation
 
 All tests must be RSpec behavioral tests of the compiled CLI. Read `spec/README.md`.
-Do not add Rust/Swift unit tests, internal-function assertions, mocks, or embedded
-self-test runners. Build with `windows/build.ps1` on Windows or `swift build` on
+Do not add Rust unit tests, internal-function assertions, mocks, or embedded
+self-test runners. Build with `windows/build.ps1` on Windows or `macos/build.sh debug` on
 macOS, then run from the repository root:
 
 ```sh
@@ -18,13 +18,13 @@ bundle install
 bundle exec rspec
 ```
 
-Tests require Ruby 3.4 and Bundler. Windows static checks are `cargo fmt --check`
-and `cargo clippy --locked --all-targets -- -D warnings` from `windows/`.
-Windows input changes also require `BLINDLY4_LIVE=1 bundle exec rspec` on an
+Tests require Ruby 3.4 and Bundler. Static checks are `cargo fmt --check` and
+`cargo clippy --locked --all-targets -- -D warnings` from each platform directory.
+Desktop input changes also require `BLINDLY4_LIVE=1 bundle exec rspec` on an
 unlocked interactive desktop (set the environment variable using PowerShell on
 Windows). This runs the harmless fixture through real CLI subprocesses.
 
-The macOS package requires macOS 13 or newer and Swift 6. Commands that inspect or
+The macOS package requires macOS 13 or newer, stable Rust, and Xcode Command Line Tools. Commands that inspect or
 operate the AX tree also require Accessibility permission for the terminal or host
 process. Default RSpec checks must not require that permission.
 
@@ -41,14 +41,12 @@ If automation is needed, do it every `{T}` minutes/hours.
 
 ## Architecture
 
-- `Sources/blindly4/main.swift`: one-shot process entry point
-- `Sources/blindly4/CLI/`: command registry, metadata, help, and command handlers
-- `Sources/blindly4/Accessibility/`: live AX reads, tree traversal, and paths
-- `Sources/blindly4/Input/`: application activation and synthetic keyboard/mouse input
-- `Sources/blindly4/Support/`: parsing, errors, output, and profiling
-- `spec/`: shared CLI behavior and Windows desktop scenarios, all in RSpec
+- `shared/`: registry, argument parsing, errors, safety helpers, and traversal
+- `macos/src/`: AX reads, AppKit application control, Quartz input, clipboard, fixture
+- `windows/src/`: UI Automation, Win32 input, clipboard, fixture
+- `spec/`: shared CLI and platform desktop behavior, all in RSpec
 
-Commands are declared once in a `CommandGroup`. Keep their summary, risk,
+Commands are declared once in `shared/registry.rs`. Keep their summary, risk,
 accessibility requirement, usage, and implementation together. `blindly4 schema`
 exposes this metadata to agents.
 
@@ -86,8 +84,8 @@ Changes to these invariants require explicit review and focused tests.
 
 ## Testing changes
 
-Keep default RSpec examples permission-free. Mark Windows desktop scenarios with
-`:windows, :live`; they require the explicit `BLINDLY4_LIVE=1` opt-in. Assert visible
+Keep default RSpec examples permission-free. Mark desktop scenarios with
+`:macos, :live` or `:windows, :live`; they require the explicit `BLINDLY4_LIVE=1` opt-in. Assert visible
 behavior and absence of side effects after rejected input. CI runs the default
 RSpec suite on every supported platform. Run live scenarios locally after changing
 UI operations, against the harmless fixture before trying a composer or control

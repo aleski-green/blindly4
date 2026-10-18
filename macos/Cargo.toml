@@ -1,0 +1,29 @@
+[package]
+name = "blindly4"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+license-file = "../license/LICENSE.md"
+description = "Stateless native macOS Accessibility CLI"
+
+[dependencies]
+serde_json = "1"
+unicode-normalization = "0.1"
+unicode-segmentation = "1"
+url = "2"
+core-foundation = "0.10"
+core-graphics = { version = "0.25", features = ["highsierra"] }
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std", "libc", "NSAccessibility", "NSAccessibilityProtocols", "NSAccessibilityConstants",
+    "NSApplication", "NSRunningApplication", "NSWorkspace", "NSPasteboard", "NSPasteboardItem",
+    "NSResponder", "NSView", "NSWindow", "NSGraphics", "NSControl", "NSCell", "NSActionCell",
+    "NSButton", "NSButtonCell", "NSTextField", "NSTextFieldCell", "NSSecureTextField",
+    "NSMenu", "NSMenuItem", "NSPopUpButton", "NSPopUpButtonCell", "NSScrollView", "NSClipView",
+] }
+
+[profile.release]
+lto = "thin"
+strip = true

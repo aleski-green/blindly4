@@ -2,25 +2,25 @@
 
 Blindly4 supports **macOS 13+ and Windows 10/11** with a shared, stateless CLI and native accessibility backends. CI builds and tests macOS, Windows x64 and Windows ARM64.
 
-This fork tracks [aleski-green/blindly4](https://github.com/aleski-green/blindly4) and implements the Windows backend in Rust.
+This fork tracks [aleski-green/blindly4](https://github.com/aleski-green/blindly4) and implements both native backends in Rust.
 
 | Operating system | Backend | Build requirements |
 | --- | --- | --- |
-| macOS 13+ | Swift / Apple Accessibility | Swift 6; Accessibility permission for desktop access |
+| macOS 13+ | Rust / Apple Accessibility | Stable Rust and Xcode Command Line Tools; Accessibility permission for desktop access |
 | Windows 10/11, ARM64 and x64 | Rust / Microsoft UI Automation | Stable Rust and MSVC C++ Build Tools with the Windows SDK; native packages need no language runtime |
 
 Windows support was contributed through the [fatmahalqaisi-code/blindly4 fork](https://github.com/fatmahalqaisi-code/blindly4).
 
 `blindly4` inspects and operates the real desktop accessibility tree: Apple Accessibility on macOS and Microsoft UI Automation on Windows. It does **not** control VoiceOver or use `say`.
 
-**Windows 10/11:** see [native Windows builds, commands and tests](windows/README.md). Both ARM64 and x64 are supported. The examples below use the shared CLI; the Swift build and macOS permission instructions apply only to macOS.
+**Windows 10/11:** see [native Windows builds, commands and tests](windows/README.md). Both ARM64 and x64 are supported. The examples below use the shared CLI; the macOS build and permission instructions apply only to macOS.
 
 ## Build on macOS
 
 ```sh
 git clone https://github.com/fatmahalqaisi-code/blindly4.git
 cd blindly4
-swift build -c release
+./macos/build.sh
 ./.build/release/blindly4 request-permission
 ```
 
@@ -131,7 +131,7 @@ blindly4 press --pid 14476 --path 0.2.5 --expect-description Send \
   --require-value-path 0.2.4 --require-value 'Hello from blindly4'
 ```
 
-If the composer cannot expose the exact draft through its own AX value, title, description, or descendants, blindly4 fails closed. This prevents a pre-existing draft or text from another control from being sent accidentally.
+If the composer cannot expose the exact draft through its own AX value (or, if unavailable, its own bounded AX subtree), blindly4 fails closed. This prevents a pre-existing draft or text from another control from being sent accidentally.
 
 If no identifiable Send button is exposed and the app uses Enter to send, verify
 the recipient, rediscover and focus the composer, then use a guarded key:
@@ -203,7 +203,7 @@ running shell commands and reading the result. Nothing else has to be wired up.
 On macOS, install it once and grant permission:
 
 ```sh
-swift build -c release
+./macos/build.sh
 cp .build/release/blindly4 /usr/local/bin/
 blindly4 request-permission
 ```
@@ -276,34 +276,15 @@ is the intended conversation. Step 6 sends the message and requires authorizatio
 ## Project layout
 
 ```text
-Sources/blindly4/
-  main.swift              entry point: run the registry, map errors to exit codes
-  CLI/                    Command type, registry, generated help
-  CLI/Commands/           one file per group of commands
-  Accessibility/          AX element reading, tree walking, path resolution
-  Input/                  synthetic mouse/keyboard events, NSWorkspace actions
-  Support/                JSON output, errors, argument parsing
+shared/                 command metadata, parsing, safety helpers, tree traversal
+macos/src/              native AX, AppKit, Quartz input, clipboard, and test fixture
+windows/src/            native UI Automation, Win32 input, clipboard, and fixture
+spec/                   RSpec CLI and live desktop behavior
 ```
 
-## Adding a command
-
-Declare it in the matching group in `CLI/Commands/`:
-
-```swift
-Command(
-    "windows",
-    "[--pid PID]",
-    summary: "List application windows."
-) { invocation, context in
-    let app = try invocation.application()
-    printJSON(["windows": children(of: app).map { summary(of: $0) }], to: context)
-}
-```
-
-The registry supplies the accessibility check and argument parsing, and the help text
-is derived from the declared name and arguments, so no other file needs to change.
-Pass `requiresAccessibility: false` for commands that do not read the accessibility
-tree.
+Commands are declared once in `shared/registry.rs`, together with their usage,
+summary, risk, accessibility requirement, and handler. Platform backends preserve
+native AX/UIA behavior and the existing platform-specific output contracts.
 
 ## Development
 
@@ -311,18 +292,18 @@ All tests are RSpec behavioral tests that run the compiled executable. Build for
 your platform, install Ruby 3.4 and Bundler, then run from the repository root:
 
 ```sh
-swift build
+./macos/build.sh debug
 bundle install
 bundle exec rspec
 ```
 
-On Windows, use `windows/build.ps1` in place of `swift build`. The default RSpec
-suite needs no Accessibility permission. CI runs it on macOS, Windows x64, and
-Windows ARM64. There are no unit tests or embedded self-test runners. See
-[behavioral test coverage and live Windows scenarios](spec/README.md).
+On Windows, use `windows/build.ps1` in place of `./macos/build.sh debug`. The default RSpec
+suite needs no Accessibility permission. CI runs it on macOS Apple Silicon and Intel, Windows x64, and Windows ARM64. There are no unit tests or embedded self-test runners. See
+[behavioral test coverage and live desktop scenarios](spec/README.md).
 
-Commands that access a live application's AX tree require macOS Accessibility
-permission and are intentionally excluded from automated CI. Exit status `64`
+Live scenarios run with `BLINDLY4_LIVE=1 bundle exec rspec` on an unlocked
+desktop. The macOS fixture is a native Rust/AppKit form; Accessibility permission
+is required. Hosted CI runs only permission-free examples. Exit status `64`
 indicates invalid CLI usage, `77` indicates an Accessibility failure, and `1`
 indicates an unexpected error. `AGENTS.md` documents the architecture, output
 contracts, and safety invariants for coding agents and contributors.
@@ -332,8 +313,7 @@ contracts, and safety invariants for coding agents and contributors.
 Every `find` traverses the current accessibility tree, stopping at its depth and
 result limits. Repeated `find --limit 1` calls no longer reuse a path hint; direct
 path operations still resolve only the requested live path. Batched AX reads and
-bounded traversal remain. Add `--profile` to inspect elapsed time, accessibility
-reads, visited nodes, and paste wait time; no profiling data is stored.
+bounded traversal remain. Add `--profile` to inspect elapsed time; no profiling data is stored.
 
 For system-wide input commands (`click`, `type`, `paste`, `scroll`, and `key`), pass `--pid` to
 make Blindly activate and verify the intended foreground application before it emits the

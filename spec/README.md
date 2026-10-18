@@ -17,7 +17,18 @@ The default executable is `.build/windows/blindly4.exe` on Windows and
 if the binary is missing or no examples are selected. Dependencies are pinned in
 `Gemfile.lock`; Ruby and the gems are development dependencies only.
 
+Build macOS with `./macos/build.sh debug` (or release with `./macos/build.sh` and
+`BLINDLY4_BIN=.build/release/blindly4`). No Swift compiler, Swift package, or .NET
+runtime is used. Windows builds use `windows/build.ps1`.
+
 ## Coverage
+
+- `macos_cli_spec.rb`: numeric and path validation, URL/key rejection, complete
+  guard requirements, platform output, and opt-in fixture launch.
+- `macos_desktop_spec.rb`: real Apple Accessibility and Quartz input against a
+  Rust/AppKit form, including the shared three-field scenarios, password redaction,
+  Unicode, exact draft checks, focus guards, popup menus, and checkboxes.
+- `support/form_examples.rb`: shared three-field form scenarios for both platforms.
 
 - `cli_spec.rb`: shared command discovery, help, risk classifications, option
   rejection, removed commands, and invocation-local profiling.
@@ -40,9 +51,17 @@ The tests intentionally verify platform-specific output where the existing Windo
 and macOS contracts differ. macOS usage errors use stderr; Windows usage errors are
 JSON on stdout. Shared tests need no Accessibility permission.
 
-## Live Windows behavior
+## Live desktop behavior
 
-Use an unlocked interactive Windows desktop and do not use it concurrently:
+Use an unlocked interactive desktop and do not use it concurrently. On macOS,
+grant Accessibility permission to the terminal or host, then run:
+
+```sh
+./macos/build.sh debug
+BLINDLY4_LIVE=1 bundle exec rspec
+```
+
+On Windows:
 
 ```powershell
 $env:BLINDLY4_LIVE = '1'
@@ -64,8 +83,8 @@ that arbitrary applications use the same shortcuts. Dropdown Enter selects an
 option without submitting the form. Visible status labels expose actual native
 checkbox, dropdown, scroll, and submission state; assertions remain in RSpec.
 
-CI runs the permission-free RSpec suite on macOS, Windows x64, and Windows ARM64.
-Live Windows scenarios are an explicit local validation step because hosted CI
+CI runs the permission-free RSpec suite on macOS Apple Silicon and Intel, Windows x64, and Windows ARM64.
+Live desktop scenarios are an explicit local validation step because hosted CI
 does not guarantee an unlocked interactive desktop. Rust formatting and Clippy are
 separate static checks. After input or safety changes, run both the default suite
 and the live suite. The former `--self-test`, `--integration-test`, and `cargo test`

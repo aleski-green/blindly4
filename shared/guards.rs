@@ -40,6 +40,7 @@ pub fn url(value: &str) -> Result<()> {
     }
     Ok(())
 }
+#[cfg(windows)]
 pub fn parse_key(text: &str) -> Result<Vec<u16>> {
     let lower = text.to_lowercase();
     let parts: Vec<_> = lower.split('+').collect();
