@@ -10,6 +10,22 @@ RSpec.describe 'The Windows CLI contract', :windows do
     usage_error('tree', '--depth', '2', '--depth', '3')
   end
 
+  it 'preserves command validation errors when the requested process has no visible window' do
+    %w[inspect press].each do |command|
+      result = cli(command, '--pid', Process.pid)
+      expect(result.status).to eq(77)
+      expect(result.json).to include('error' => "No visible windows for PID #{Process.pid}", 'code' => 'accessibility_error')
+    end
+    %w[actions focus].each do |command|
+      result = cli(command, '--pid', Process.pid)
+      expect(result.status).to eq(64)
+      expect(result.json).to include('code' => 'usage_error')
+    end
+    result = cli('inspect', '--pid', Process.pid, '--path', 'malformed')
+    expect(result.status).to eq(77)
+    expect(result.json).to include('error' => "No visible windows for PID #{Process.pid}")
+  end
+
   %w[-1 65 2147483648 x].each do |depth|
     it "rejects invalid tree depth #{depth}" do
       usage_error('tree', '--depth', depth)

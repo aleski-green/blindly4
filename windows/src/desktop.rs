@@ -1,6 +1,5 @@
 use crate::{
     error::{Error, Result},
-    guards,
     invocation::Invocation,
     native,
     node::Node,
@@ -8,34 +7,10 @@ use crate::{
 use serde_json::{Value, json};
 use std::{thread::sleep, time::Duration};
 
-pub struct Desktop {
-    pub root: Node,
-}
-impl Desktop {
-    pub fn new(pid: i32) -> Result<Self> {
-        if pid <= 0 || !native::windows()?.iter().any(|w| w.pid == pid) {
-            return Err(Error::access(format!("No visible windows for PID {pid}")));
-        }
-        Ok(Self {
-            root: Node::root(pid)?,
-        })
-    }
-    pub fn resolve(&self, path: &str) -> Result<Node> {
-        let mut node = self.root.clone();
-        for index in guards::path(path)? {
-            node = node.children()?.into_iter().nth(index).ok_or_else(|| {
-                Error::access(format!(
-                    "Path {path} no longer exists; rediscover the target"
-                ))
-            })?;
-        }
-        Ok(node)
-    }
-}
 pub fn tree(i: &Invocation) -> Result<()> {
     let mut remaining = i.integer("max-nodes", 250, 1, 10000)?;
     let depth = i.integer("depth", 4, 0, 64)?;
-    let desktop = Desktop::new(i.pid()?)?;
+    let root = Node::application(i.pid()?)?;
     let mut truncated = false;
     fn build(n: &Node, depth: i32, remaining: &mut i32, truncated: &mut bool) -> Result<Value> {
         *remaining -= 1;
@@ -53,7 +28,7 @@ pub fn tree(i: &Invocation) -> Result<()> {
         }
         Ok(row)
     }
-    let tree = build(&desktop.root, depth, &mut remaining, &mut truncated)?;
+    let tree = build(&root, depth, &mut remaining, &mut truncated)?;
     crate::json(&json!({"tree": tree, "truncated": truncated}))
 }
 fn walk_bounded_depth_first(
@@ -86,7 +61,7 @@ fn walk_bounded_depth_first(
 }
 pub fn show(i: &Invocation) -> Result<()> {
     let depth = i.integer("depth", 4, 0, 64)?;
-    let truncated = walk_bounded_depth_first(Desktop::new(i.pid()?)?.root, depth, |node, path| {
+    let truncated = walk_bounded_depth_first(Node::application(i.pid()?)?, depth, |node, path| {
         let row = node.detail(None)?;
         println!(
             "{path:<18} {} {} {}",
@@ -114,7 +89,7 @@ pub fn find(i: &Invocation) -> Result<()> {
     let limit = i.integer("limit", 25, 1, 10000)? as usize;
     let depth = i.integer("depth", 8, 0, 64)?;
     let mut matches = vec![];
-    let truncated = walk_bounded_depth_first(Desktop::new(i.pid()?)?.root, depth, |node, path| {
+    let truncated = walk_bounded_depth_first(Node::application(i.pid()?)?, depth, |node, path| {
         let row = node.detail(Some(path))?;
         if filters
             .iter()
@@ -136,11 +111,7 @@ pub fn focused(i: &Invocation) -> Result<()> {
     if i.has("pid") && native::foreground_pid() != pid {
         return Err(unavailable());
     }
-    let root = Node::root(pid)?;
-    let element = unsafe { root.automation.GetFocusedElement() }.map_err(|_| unavailable())?;
-    let node = root
-        .with_same_process_element(element)
-        .map_err(|_| unavailable())?;
+    let node = Node::root(pid)?.focused().map_err(|_| unavailable())?;
     crate::json(&node.detail(None)?)
 }
 pub fn mutate(
@@ -149,14 +120,14 @@ pub fn mutate(
     mutate: impl FnOnce(&Node) -> Result<()>,
 ) -> Result<()> {
     let path = i.value("path")?;
-    mutate(&Desktop::new(i.pid()?)?.resolve(path)?)?;
+    mutate(&Node::application(i.pid()?)?.resolve(path)?)?;
     crate::json(&json!({"path": path, "action": action, "ok": true}))
 }
 pub fn press(i: &Invocation) -> Result<()> {
     i.pair("require-value-path", "require-value", false)?;
-    let desktop = Desktop::new(i.pid()?)?;
+    let root = Node::application(i.pid()?)?;
     let path = i.value("path")?;
-    let target = desktop.resolve(path)?;
+    let target = root.resolve(path)?;
     if let Some(expected) = i.optional("expect-description") {
         if !target.detail(None)?["description"]
             .as_str()
@@ -170,7 +141,7 @@ pub fn press(i: &Invocation) -> Result<()> {
         }
     }
     if let Some(draft_path) = i.optional("require-value-path") {
-        if !desktop
+        if !root
             .resolve(draft_path)?
             .exact_draft(i.value("require-value")?)?
         {

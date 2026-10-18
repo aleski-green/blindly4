@@ -11,9 +11,9 @@ use windows::{
 
 #[derive(Clone)]
 pub struct Node {
-    pub element: Option<IUIAutomationElement>,
-    pub pid: i32,
-    pub automation: IUIAutomation,
+    element: Option<IUIAutomationElement>,
+    pid: i32,
+    automation: IUIAutomation,
 }
 impl Node {
     pub fn root(pid: i32) -> Result<Self> {
@@ -23,7 +23,27 @@ impl Node {
             automation: unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)? },
         })
     }
-    pub fn with_same_process_element(&self, element: IUIAutomationElement) -> Result<Self> {
+    pub fn application(pid: i32) -> Result<Self> {
+        if pid <= 0 || !native::windows()?.iter().any(|window| window.pid == pid) {
+            return Err(Error::access(format!("No visible windows for PID {pid}")));
+        }
+        Self::root(pid)
+    }
+    pub fn resolve(&self, path: &str) -> Result<Self> {
+        let mut node = self.clone();
+        for index in guards::path(path)? {
+            node = node.children()?.into_iter().nth(index).ok_or_else(|| {
+                Error::access(format!(
+                    "Path {path} no longer exists; rediscover the target"
+                ))
+            })?;
+        }
+        Ok(node)
+    }
+    pub fn focused(&self) -> Result<Self> {
+        self.with_same_process_element(unsafe { self.automation.GetFocusedElement()? })
+    }
+    fn with_same_process_element(&self, element: IUIAutomationElement) -> Result<Self> {
         let observed_pid = unsafe { element.CurrentProcessId()? };
         if observed_pid != self.pid {
             return Err(Error::access(format!(
@@ -69,36 +89,13 @@ impl Node {
             return Ok("AXApplication");
         };
         let control = unsafe { e.CurrentControlType()? };
-        Ok(match control {
-            UIA_EditControlTypeId => {
-                if unsafe { e.CurrentIsPassword()?.as_bool() } {
-                    "AXSecureTextField"
-                } else {
-                    "AXTextField"
-                }
-            }
-            UIA_DocumentControlTypeId => "AXTextArea",
-            UIA_WindowControlTypeId => "AXWindow",
-            UIA_ButtonControlTypeId => "AXButton",
-            UIA_TextControlTypeId => "AXStaticText",
-            UIA_HyperlinkControlTypeId => "AXLink",
-            UIA_CheckBoxControlTypeId => "AXCheckBox",
-            UIA_RadioButtonControlTypeId | UIA_TabItemControlTypeId => "AXRadioButton",
-            UIA_ComboBoxControlTypeId => "AXComboBox",
-            UIA_TabControlTypeId => "AXTabGroup",
-            UIA_ListControlTypeId => "AXList",
-            UIA_ListItemControlTypeId | UIA_TreeItemControlTypeId => "AXRow",
-            UIA_TreeControlTypeId => "AXOutline",
-            UIA_MenuControlTypeId => "AXMenu",
-            UIA_MenuBarControlTypeId => "AXMenuBar",
-            UIA_MenuItemControlTypeId => "AXMenuItem",
-            UIA_ScrollBarControlTypeId => "AXScrollBar",
-            UIA_SliderControlTypeId => "AXSlider",
-            UIA_ImageControlTypeId => "AXImage",
-            UIA_TableControlTypeId | UIA_DataGridControlTypeId => "AXTable",
-            UIA_ProgressBarControlTypeId => "AXProgressIndicator",
-            _ => "AXGroup",
-        })
+        Ok(
+            if control == UIA_EditControlTypeId && unsafe { e.CurrentIsPassword()?.as_bool() } {
+                "AXSecureTextField"
+            } else {
+                control_type_names(control).1
+            },
+        )
     }
     pub fn value(&self) -> Result<Option<String>> {
         let Some(e) = &self.element else {
@@ -153,6 +150,18 @@ impl Node {
     pub fn exact_draft(&self, expected: &str) -> Result<bool> {
         Ok(self.value()?.is_some_and(|v| guards::exact(&v, expected)))
     }
+    pub fn require_focused_draft(&self, expected: &str) -> Result<()> {
+        let writable = self.writable()?;
+        let focused = self.has_focus()?;
+        let matches = self.exact_draft(expected)?;
+        let frontmost = native::foreground_pid() == self.pid;
+        if !(writable && focused && matches && frontmost) {
+            return Err(Error::access(
+                "Input blocked: writable target, keyboard focus, exact draft and foreground PID must all match. Do not send.",
+            ));
+        }
+        Ok(())
+    }
     pub fn selected(&self) -> Result<bool> {
         match self
             .available_pattern::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)?
@@ -206,7 +215,7 @@ impl Node {
             row["identifier"] = json!(e.CurrentAutomationId()?.to_string());
             row["subrole"] = json!(format!(
                 "ControlType.{}",
-                control_name(e.CurrentControlType()?)
+                control_type_names(e.CurrentControlType()?).0
             ));
             row["value"] = json!(self.value()?);
             row["enabled"] = json!(e.CurrentIsEnabled()?.as_bool());
@@ -341,7 +350,7 @@ impl Node {
         Ok(())
     }
 }
-pub(crate) fn nullable_uia_element(
+fn nullable_uia_element(
     result: windows::core::Result<IUIAutomationElement>,
 ) -> Result<Option<IUIAutomationElement>> {
     match result {
@@ -350,52 +359,52 @@ pub(crate) fn nullable_uia_element(
         Err(e) => Err(e.into()),
     }
 }
-fn control_name(id: UIA_CONTROLTYPE_ID) -> &'static str {
-    const NAMES: &[&str] = &[
-        "Button",
-        "Calendar",
-        "CheckBox",
-        "ComboBox",
-        "Edit",
-        "Hyperlink",
-        "Image",
-        "ListItem",
-        "List",
-        "Menu",
-        "MenuBar",
-        "MenuItem",
-        "ProgressBar",
-        "RadioButton",
-        "ScrollBar",
-        "Slider",
-        "Spinner",
-        "StatusBar",
-        "Tab",
-        "TabItem",
-        "Text",
-        "ToolBar",
-        "ToolTip",
-        "Tree",
-        "TreeItem",
-        "Custom",
-        "Group",
-        "Thumb",
-        "DataGrid",
-        "DataItem",
-        "Document",
-        "SplitButton",
-        "Window",
-        "Pane",
-        "Header",
-        "HeaderItem",
-        "Table",
-        "TitleBar",
-        "Separator",
-        "SemanticZoom",
-        "AppBar",
+fn control_type_names(id: UIA_CONTROLTYPE_ID) -> (&'static str, &'static str) {
+    const NAMES: &[(&str, &str)] = &[
+        ("Button", "AXButton"),
+        ("Calendar", "AXGroup"),
+        ("CheckBox", "AXCheckBox"),
+        ("ComboBox", "AXComboBox"),
+        ("Edit", "AXTextField"),
+        ("Hyperlink", "AXLink"),
+        ("Image", "AXImage"),
+        ("ListItem", "AXRow"),
+        ("List", "AXList"),
+        ("Menu", "AXMenu"),
+        ("MenuBar", "AXMenuBar"),
+        ("MenuItem", "AXMenuItem"),
+        ("ProgressBar", "AXProgressIndicator"),
+        ("RadioButton", "AXRadioButton"),
+        ("ScrollBar", "AXScrollBar"),
+        ("Slider", "AXSlider"),
+        ("Spinner", "AXGroup"),
+        ("StatusBar", "AXGroup"),
+        ("Tab", "AXTabGroup"),
+        ("TabItem", "AXRadioButton"),
+        ("Text", "AXStaticText"),
+        ("ToolBar", "AXGroup"),
+        ("ToolTip", "AXGroup"),
+        ("Tree", "AXOutline"),
+        ("TreeItem", "AXRow"),
+        ("Custom", "AXGroup"),
+        ("Group", "AXGroup"),
+        ("Thumb", "AXGroup"),
+        ("DataGrid", "AXTable"),
+        ("DataItem", "AXGroup"),
+        ("Document", "AXTextArea"),
+        ("SplitButton", "AXGroup"),
+        ("Window", "AXWindow"),
+        ("Pane", "AXGroup"),
+        ("Header", "AXGroup"),
+        ("HeaderItem", "AXGroup"),
+        ("Table", "AXTable"),
+        ("TitleBar", "AXGroup"),
+        ("Separator", "AXGroup"),
+        ("SemanticZoom", "AXGroup"),
+        ("AppBar", "AXGroup"),
     ];
     id.0.checked_sub(50000)
         .and_then(|n| NAMES.get(n as usize))
         .copied()
-        .unwrap_or("Custom")
+        .unwrap_or(("Custom", "AXGroup"))
 }

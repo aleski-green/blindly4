@@ -1,10 +1,10 @@
 use crate::{
     clipboard::Clipboard,
-    desktop::Desktop,
     error::{Error, Result},
     guards,
     invocation::Invocation,
     native,
+    node::Node,
 };
 use serde_json::json;
 use std::{thread::sleep, time::Duration};
@@ -36,13 +36,9 @@ pub fn key(i: &Invocation) -> Result<()> {
     let keys = guards::parse_key(key)?;
     let pid = target(i)?;
     if let Some(path) = i.optional("target-path") {
-        let node = Desktop::new(pid)?.resolve(path)?;
-        guards::require_matching_draft(
-            node.writable()?,
-            node.has_focus()?,
-            node.exact_draft(i.value("require-value")?)?,
-            native::foreground_pid() == pid,
-        )?;
+        Node::application(pid)?
+            .resolve(path)?
+            .require_focused_draft(i.value("require-value")?)?;
     }
     native::key(pid, &keys)?;
     let mut result = json!({"key": key, "pid": pid, "ok": true});
@@ -56,7 +52,7 @@ pub fn selected_text(i: &Invocation) -> Result<()> {
     let value = i.value("value")?;
     let pid = i.pid()?;
     let path = i.value("path")?;
-    let node = Desktop::new(pid)?.resolve(path)?;
+    let node = Node::application(pid)?.resolve(path)?;
     if !node.writable()? {
         return Err(Error::usage("Target is not a writable text control"));
     }
@@ -86,7 +82,7 @@ pub fn paste(i: &Invocation) -> Result<()> {
     }
     let pid = i.pid()?;
     let node = path
-        .map(|path| Desktop::new(pid)?.resolve(path))
+        .map(|path| Node::application(pid)?.resolve(path))
         .transpose()?;
     if let Some(node) = &node {
         if !node.writable()? {
@@ -105,24 +101,14 @@ pub fn paste(i: &Invocation) -> Result<()> {
             ));
         }
         node.focus()?;
-        guards::require_matching_draft(
-            node.writable()?,
-            node.has_focus()?,
-            node.exact_draft("")?,
-            native::foreground_pid() == pid,
-        )?;
+        node.require_focused_draft("")?;
     }
     clipboard.replace(text)?;
     let outcome = (|| -> Result<()> {
         if let Some(node) = &node {
-            guards::require_matching_draft(
-                node.writable()?,
-                node.has_focus()?,
-                node.exact_draft("")?,
-                native::foreground_pid() == pid,
-            )?;
+            node.require_focused_draft("")?;
         }
-        native::key_named(pid, "ctrl+v")?;
+        native::key(pid, &guards::parse_key("ctrl+v")?)?;
         if let Some(node) = &node {
             for _ in 0..40 {
                 if node.exact_draft(text)? && node.has_focus()? && native::foreground_pid() == pid {

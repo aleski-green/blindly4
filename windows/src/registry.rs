@@ -4,6 +4,7 @@ use crate::{
     guards, input,
     invocation::Invocation,
     native,
+    node::Node,
 };
 use serde_json::{Value, json};
 
@@ -146,7 +147,7 @@ pub static ALL: &[Command] = &[
         "read-only",
         true,
         |i| crate::json(
-            &desktop::Desktop::new(i.pid()?)?
+            &Node::application(i.pid()?)?
                 .resolve(i.value("path")?)?
                 .detail(None)?
         )
@@ -158,7 +159,7 @@ pub static ALL: &[Command] = &[
         "read-only",
         true,
         |i| crate::json(
-            &json!({"path": i.value("path")?, "actions": desktop::Desktop::new(i.pid()?)?.resolve(i.value("path")?)?.actions()?})
+            &json!({"path": i.value("path")?, "actions": Node::application(i.pid()?)?.resolve(i.value("path")?)?.actions()?})
         )
     ),
     command!(
@@ -167,7 +168,7 @@ pub static ALL: &[Command] = &[
         "Focus an element.",
         "ui-mutation",
         true,
-        |i| desktop::mutate(i, "AXFocused", |n| n.focus())
+        |i| desktop::mutate(i, "AXFocused", Node::focus)
     ),
     command!(
         "show-menu",
@@ -175,7 +176,7 @@ pub static ALL: &[Command] = &[
         "Expand an accessible menu control when supported.",
         "ui-mutation",
         true,
-        |i| desktop::mutate(i, "AXShowMenu", |n| n.expand())
+        |i| desktop::mutate(i, "AXShowMenu", Node::expand)
     ),
     command!(
         "scroll-to",
@@ -183,7 +184,7 @@ pub static ALL: &[Command] = &[
         "Scroll an accessible item into view.",
         "ui-mutation",
         true,
-        |i| desktop::mutate(i, "AXScrollToVisible", |n| n.scroll_to())
+        |i| desktop::mutate(i, "AXScrollToVisible", Node::scroll_to)
     ),
     command!(
         "press",

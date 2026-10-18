@@ -1,7 +1,4 @@
-use crate::{
-    error::{Error, Result},
-    guards,
-};
+use crate::error::{Error, Result};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, thread::sleep, time::Duration};
 use windows::{
@@ -178,9 +175,6 @@ pub fn key(pid: i32, keys: &[u16]) -> Result<()> {
         .chain(keys.iter().rev().map(|k| key_event(*k, true, false)))
         .collect();
     send(pid, &events)
-}
-pub fn key_named(pid: i32, keys: &str) -> Result<()> {
-    key(pid, &guards::parse_key(keys)?)
 }
 fn mouse(flags: MOUSE_EVENT_FLAGS, data: u32) -> INPUT {
     INPUT {

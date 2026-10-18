@@ -25,6 +25,37 @@ RSpec.describe 'Windows desktop behavior', :windows, :live do
     expect(limited.fetch('truncated')).to be(true)
   end
 
+  it 'reports matching native control types, roles, and supported actions' do
+    [ ['Draft', 'AXTextField', 'Edit', []],
+      ['Password', 'AXSecureTextField', 'Edit', []],
+      ['Submit test draft', 'AXButton', 'Button', ['AXPress']],
+      ['Test checkbox', 'AXCheckBox', 'CheckBox', ['AXPress']],
+      ['Delivery choice', 'AXComboBox', 'ComboBox', ['AXShowMenu']],
+      ['Scrollable options', 'AXList', 'List', []],
+      ['Option 02', 'AXRow', 'ListItem', ['AXPress', 'AXScrollToVisible']],
+      ['Fixture ready', 'AXStaticText', 'Text', []] ].each do |title, role, control_type, actions|
+      path = find_control_path(title, role)
+      row = app('inspect', '--path', path)
+      expect(row).to include('role' => role, 'subrole' => "ControlType.#{control_type}")
+      expect(row.fetch('actions')).to include(*actions) unless actions.empty?
+      expect(app('actions', '--path', path)).to eq('path' => path, 'actions' => row.fetch('actions'))
+    end
+    expect_not_submitted
+  end
+
+  it 'keeps the application root readable while rejecting control mutations' do
+    set_draft('unchanged')
+    expect(app('actions', '--path', '')).to eq('path' => '', 'actions' => [])
+    %w[focus press show-menu scroll-to].each do |command|
+      rejected_app(64, command, '--path', '')
+    end
+    rejected_app(64, 'set-value', '--path', '', '--value', 'never entered')
+    rejected_app(64, 'paste', '--target-path', '', '--text', 'never entered')
+    rejected_app(77, 'key', '--key', 'enter', '--target-path', '', '--require-value', 'unchanged')
+    expect(draft_value).to eq('unchanged')
+    expect_not_submitted
+  end
+
   it 'sets a draft, focuses it, and reports the observed value' do
     set_draft('old draft')
     expect(draft_value).to eq('old draft')
