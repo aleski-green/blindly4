@@ -3,3 +3,5 @@
 .logs/
 .swiftpm/
 windows/target/
+.bundle/
+vendor/bundle/

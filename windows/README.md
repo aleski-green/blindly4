@@ -1,6 +1,6 @@
 # Blindly4 on Windows
 
-The Windows implementation is a native Rust CLI backed by Microsoft UI Automation and Win32 SendInput through Microsoft's `windows` crate. It preserves the stateless schema-version-2 verbs, JSON keys, exit codes, command risk classifications, AX-style roles, and guarded draft checks used by Sapiens4. The Swift/macOS implementation remains available unchanged.
+The Windows implementation is a native Rust CLI backed by Microsoft UI Automation and Win32 SendInput through Microsoft's `windows` crate. It preserves the stateless schema-version-2 verbs, JSON keys, exit codes, command risk classifications, AX-style roles, and guarded draft checks used by Sapiens4. The Swift/macOS implementation remains available, with both platforms tested through RSpec.
 
 ## Build and run
 
@@ -11,7 +11,6 @@ git clone https://github.com/fatmahalqaisi-code/blindly4.git
 cd blindly4
 rustup target add aarch64-pc-windows-msvc # x86_64-pc-windows-msvc for win-x64
 .\windows\build.ps1 -Runtime win-arm64 # or win-x64
-.\.build\windows\blindly4.exe --self-test
 .\.build\windows\blindly4.exe schema
 .\.build\windows\blindly4.exe apps
 .\.build\windows\blindly4.exe show --pid 1234 --depth 6
@@ -31,14 +30,23 @@ UIA capability differences are explicit: `show-menu` requires ExpandCollapsePatt
 
 ## Validation
 
-`--self-test` is permission-free and tests parsing, Unicode matching, URL/path validation, command metadata, UIA null/error handling and fail-closed draft conditions. From `windows/`, also run `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`, and `cargo test --locked`.
+All tests use RSpec to execute the compiled binary and observe its behavior. Install Ruby 3.4 and Bundler, then run from the repository root:
+
+```powershell
+bundle install
+bundle exec rspec
+```
+
+The default suite checks the public schema, help, errors, argument validation, and profiling without desktop access. From `windows/`, also run the static checks `cargo fmt --check` and `cargo clippy --locked --all-targets -- -D warnings`. No unit tests or embedded self-test runners remain.
 
 On an unlocked interactive Windows desktop, run:
 
 ```powershell
-.\.build\windows\blindly4.exe --integration-test
+$env:BLINDLY4_LIVE = '1'
+bundle exec rspec
+Remove-Item Env:BLINDLY4_LIVE
 ```
 
-This opens a harmless local Win32 fixture implemented in Rust, executes real CLI subprocesses against its accessibility tree, checks Unicode input and guarded submission, verifies rejected operations and password redaction, then closes the fixture. It temporarily uses foreground focus and restores clipboard data. Do not use the desktop concurrently. It sends no messages to external services. CI builds native x64 and ARM64 packages and runs permission-free checks; live UI validation is an explicit local step.
+RSpec opens a fresh harmless Win32 fixture for each desktop scenario, executes real CLI subprocesses against its accessibility tree, checks Unicode input and guarded submission, verifies rejected operations and password redaction, and closes the fixture even after a failure. It temporarily uses foreground focus and restores clipboard data. Do not use the desktop concurrently. It sends no messages to external services. CI builds native x64 and ARM64 packages and runs the permission-free RSpec suite; live UI validation is an explicit local step. See [test coverage and configuration](../spec/README.md).
 
-Architecture: `src/main.rs` is the entry point; `registry.rs`, `invocation.rs` and `guards.rs` own the CLI contract; `desktop.rs` and `node.rs` own UIA traversal; `native.rs`, `input.rs` and `clipboard.rs` own Win32 input and resource lifetimes. `self_test.rs` and `fixture.rs` provide validation. Run both Windows checks after changing input or safety behavior; preserve the macOS Swift self-test in macOS CI.
+Architecture: `src/main.rs` is the entry point; `registry.rs`, `invocation.rs` and `guards.rs` own the CLI contract; `desktop.rs` and `node.rs` own UIA traversal; `native.rs`, `input.rs` and `clipboard.rs` own Win32 input and resource lifetimes. `fixture.rs` supplies only the harmless test window; all test orchestration and expectations live in `spec/`. Run both default and live RSpec suites after changing input or safety behavior.

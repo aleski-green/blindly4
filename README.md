@@ -34,7 +34,6 @@ From PowerShell with Git, stable Rust, and Visual Studio C++ Build Tools (includ
 git clone https://github.com/fatmahalqaisi-code/blindly4.git
 cd blindly4
 .\windows\build.ps1
-.\.build\windows\blindly4.exe --self-test
 .\.build\windows\blindly4.exe apps
 ```
 
@@ -308,16 +307,19 @@ tree.
 
 ## Development
 
-Run the permission-free validation suite from the repository root:
+All tests are RSpec behavioral tests that run the compiled executable. Build for
+your platform, install Ruby 3.4 and Bundler, then run from the repository root:
 
 ```sh
 swift build
-swift run blindly4 --self-test
-swift run blindly4 schema
+bundle install
+bundle exec rspec
 ```
 
-`--self-test` needs no test framework and no Accessibility permission, so it runs
-anywhere the executable builds. CI runs the same commands on every pull request.
+On Windows, use `windows/build.ps1` in place of `swift build`. The default RSpec
+suite needs no Accessibility permission. CI runs it on macOS, Windows x64, and
+Windows ARM64. There are no unit tests or embedded self-test runners. See
+[behavioral test coverage and live Windows scenarios](spec/README.md).
 
 Commands that access a live application's AX tree require macOS Accessibility
 permission and are intentionally excluded from automated CI. Exit status `64`

@@ -8,7 +8,6 @@ mod invocation;
 mod native;
 mod node;
 mod registry;
-mod self_test;
 
 use error::Result;
 use serde_json::{Value, json};
@@ -41,12 +40,6 @@ impl Drop for Com {
 }
 
 fn run(args: &[String]) -> Result<()> {
-    if args == ["--self-test"] {
-        return self_test::run();
-    }
-    if args == ["--integration-test"] {
-        return self_test::integration();
-    }
     if args.is_empty() || args == ["--help"] || args == ["help"] {
         println!("{}", registry::help());
         return Ok(());
@@ -72,15 +65,13 @@ fn main() {
     }
     let profile = args.iter().any(|a| a == "--profile");
     args.retain(|a| a != "--profile");
-    if args != ["--integration-test"] {
-        std::thread::spawn(|| {
-            std::thread::sleep(Duration::from_secs(25));
-            let _ = json(
-                &json!({"error": "Accessibility command timed out; inspect the target before retrying input.", "code": "accessibility_error"}),
-            );
-            std::process::exit(77);
-        });
-    }
+    std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_secs(25));
+        let _ = json(
+            &json!({"error": "Accessibility command timed out; inspect the target before retrying input.", "code": "accessibility_error"}),
+        );
+        std::process::exit(77);
+    });
     let result = run(&args);
     if profile {
         eprintln!(

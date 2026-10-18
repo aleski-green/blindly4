@@ -1,4 +1,4 @@
-//! Harmless native Win32 fixture, used only by the explicit integration test.
+//! Harmless native Win32 fixture driven by the RSpec desktop behavior suite.
 use crate::{
     error::{Error, Result},
     native,

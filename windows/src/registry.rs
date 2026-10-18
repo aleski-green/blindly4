@@ -260,7 +260,7 @@ pub fn get(name: &str) -> Result<&'static Command> {
 }
 pub fn help() -> String {
     format!(
-        "Blindly4 for Windows — native UI Automation, stateless CLI\n{}\nGlobal: --profile, --self-test. Paths are live: rediscover before input. Serialize desktop workflows.",
+        "Blindly4 for Windows — native UI Automation, stateless CLI\n{}\nGlobal: --profile. Paths are live: rediscover before input. Serialize desktop workflows.",
         ALL.iter()
             .map(|c| format!(
                 "  {} {}\n    {} [{}]",

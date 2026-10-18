@@ -25,19 +25,15 @@ jobs:
           if ($LASTEXITCODE) { throw 'Formatting failed' }
           cargo clippy --locked --all-targets -- -D warnings
           if ($LASTEXITCODE) { throw 'Clippy failed' }
-      - name: Rust tests
-        working-directory: windows
-        run: cargo test --locked
       - name: Build native executable
         shell: pwsh
         run: ./windows/build.ps1 -Runtime ${{ matrix.runtime }}
-      - name: Permission-free checks and schema
-        shell: pwsh
-        run: |
-          & ./.build/windows/blindly4.exe --self-test
-          if ($LASTEXITCODE) { throw 'Self-test failed' }
-          & ./.build/windows/blindly4.exe schema
-          if ($LASTEXITCODE) { throw 'Schema failed' }
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+      - name: RSpec CLI behavior
+        run: bundle exec rspec
       - uses: actions/upload-artifact@v4
         with:
           name: blindly4-${{ matrix.runtime }}

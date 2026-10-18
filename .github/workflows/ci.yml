@@ -14,10 +14,12 @@ jobs:
         run: swift --version
       - name: Build
         run: swift build
-      - name: Dependency-free self-test
-        run: swift run blindly4 --self-test
-      - name: Machine-readable schema
-        run: swift run blindly4 schema
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+      - name: RSpec CLI behavior
+        run: bundle exec rspec
       - name: Package test binary
         uses: actions/upload-artifact@v4
         with:
