@@ -37,6 +37,8 @@ RSpec.describe 'Windows selection and scrolling controls', :windows, :live do
     expect_label('Dropdown: open; choice: 1')
     app('press', '--path', control('Choice two', 'AXRow'), '--require-selected')
     observe_until { visible_label('Dropdown:').end_with?('choice: 2') }
+    app('show-menu', '--path', control('Delivery choice', 'AXComboBox'))
+    expect_label('Dropdown: open; choice: 2')
     app('key', '--key', 'escape')
     expect_label('Dropdown: closed; choice: 2')
     expect_not_submitted
