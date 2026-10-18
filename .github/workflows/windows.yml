@@ -14,10 +14,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          dotnet-version: '10.0.x'
-      - name: Build self-contained executable
+          components: rustfmt, clippy
+      - name: Rust format and lint
+        working-directory: windows
+        shell: pwsh
+        run: |
+          cargo fmt --check
+          if ($LASTEXITCODE) { throw 'Formatting failed' }
+          cargo clippy --locked --all-targets -- -D warnings
+          if ($LASTEXITCODE) { throw 'Clippy failed' }
+      - name: Rust tests
+        working-directory: windows
+        run: cargo test --locked
+      - name: Build native executable
         shell: pwsh
         run: ./windows/build.ps1 -Runtime ${{ matrix.runtime }}
       - name: Permission-free checks and schema

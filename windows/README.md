@@ -1,14 +1,15 @@
 # Blindly4 on Windows
 
-The Windows implementation is a native C#/.NET 10 CLI backed by Microsoft UI Automation and Win32 SendInput. It preserves the stateless schema-version-2 verbs, JSON keys, exit codes, command risk classifications, AX-style roles, and guarded draft checks used by Sapiens4. The Swift/macOS implementation remains available unchanged.
+The Windows implementation is a native Rust CLI backed by Microsoft UI Automation and Win32 SendInput through Microsoft's `windows` crate. It preserves the stateless schema-version-2 verbs, JSON keys, exit codes, command risk classifications, AX-style roles, and guarded draft checks used by Sapiens4. The Swift/macOS implementation remains available unchanged.
 
 ## Build and run
 
-Requires Windows 10/11 and .NET SDK 10 to build. Published packages include the runtime and require no administrator access or WSL.
+Requires Windows 10/11, stable Rust (edition 2024), and Visual Studio C++ Build Tools with the Windows SDK to build with the default MSVC toolchain. Install the C++ tools for the target architecture. The executable requires no separately installed language runtime, administrator access, or WSL. Dependencies are pinned in `Cargo.lock`; builds use `--locked`.
 
 ```powershell
-git clone https://github.com/aleski-green/blindly4.git
+git clone https://github.com/fatmahalqaisi-code/blindly4.git
 cd blindly4
+rustup target add aarch64-pc-windows-msvc # x86_64-pc-windows-msvc for win-x64
 .\windows\build.ps1 -Runtime win-arm64 # or win-x64
 .\.build\windows\blindly4.exe --self-test
 .\.build\windows\blindly4.exe schema
@@ -16,19 +17,21 @@ cd blindly4
 .\.build\windows\blindly4.exe show --pid 1234 --depth 6
 ```
 
+The default build selects the host architecture; `-Runtime` selects explicitly. For development without MSVC, install the matching `*-pc-windows-gnullvm` Rust toolchain and LLVM-MinGW, add its `bin` directory to `PATH`, and pass `-Toolchain gnullvm`. Both toolchains statically link their C/unwind runtime. CI validates MSVC packages on native x64 and ARM64 runners.
+
 All regular commands are supported: apps, activate, open, tree, show, find, focused, inspect, actions, focus, press, show-menu, scroll-to, set-value, set-selected-text, click, type, paste, scroll and key. `request-permission` explains Windows' access model; it never elevates the process or changes system permissions.
 
 Paths begin at a synthetic `AXApplication` root. Its children (`0`, `1`, …) are visible top-level windows, sorted by handle; descendants use UI Automation's Control View. Rediscover paths immediately before mutation. Password values are never returned. `--profile` writes invocation timing only to stderr. Traversals are bounded and inaccessible or disappeared controls report errors.
 
 Use `--pid` for input. Input requires the intended foreground process; coordinate clicks and wheel events also verify the app under the pointer. Windows may refuse to activate a background app; this fails closed. `command`/`cmd` key modifiers map to Ctrl on Windows. `delete` retains the macOS CLI's backward-delete meaning; use `forward-delete` for the Windows Delete key. Scroll amounts count wheel ticks and obey the user's Windows scroll settings.
 
-Guarded paste requires a writable ValuePattern and verifies that exact control's value. Guarded key additionally checks focus and foreground PID. Guarded press checks only the specified draft control, not matching text elsewhere in a window. Unicode canonical normalization and directionality handling preserve the macOS matching rules. Focus/identity failures stop input. Clipboard formats are saved and restored unless another application changes the clipboard during the paste. Success indicates verified preconditions and local action, not external delivery.
+Guarded paste requires a writable ValuePattern and verifies that exact control's value. Guarded key additionally checks focus and foreground PID. Guarded press checks only the specified draft control, not matching text elsewhere in a window. Unicode canonical normalization and directionality handling preserve the macOS matching rules. Focus/identity failures stop input. Clipboard formats are copied before editing and restored unless another application changes the clipboard during the paste. Owner-managed private formats or formats that cannot be copied cause a pre-input failure; they are never silently discarded. Success indicates verified preconditions and local action, not external delivery.
 
 UIA capability differences are explicit: `show-menu` requires ExpandCollapsePattern; `scroll-to` requires ScrollItemPattern; `set-value` and guarded editing require writable ValuePattern. Providers exposing only read-only TextPattern cannot satisfy a guarded draft operation. Elevated apps, other sessions and the Windows secure desktop are outside the supported target set.
 
 ## Validation
 
-`--self-test` is permission-free and tests parsing, Unicode matching, URL/path validation, command metadata and fail-closed draft conditions.
+`--self-test` is permission-free and tests parsing, Unicode matching, URL/path validation, command metadata, UIA null/error handling and fail-closed draft conditions. From `windows/`, also run `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`, and `cargo test --locked`.
 
 On an unlocked interactive Windows desktop, run:
 
@@ -36,6 +39,6 @@ On an unlocked interactive Windows desktop, run:
 .\.build\windows\blindly4.exe --integration-test
 ```
 
-This opens a harmless local WinForms fixture, executes real CLI subprocesses against its accessibility tree, checks Unicode input and guarded submission, verifies rejected operations, then closes the fixture. It temporarily uses foreground focus and restores clipboard data. Do not use the desktop concurrently. It sends no messages to external services. CI builds native x64 and ARM64 packages and runs permission-free checks; live UI validation is an explicit local step.
+This opens a harmless local Win32 fixture implemented in Rust, executes real CLI subprocesses against its accessibility tree, checks Unicode input and guarded submission, verifies rejected operations and password redaction, then closes the fixture. It temporarily uses foreground focus and restores clipboard data. Do not use the desktop concurrently. It sends no messages to external services. CI builds native x64 and ARM64 packages and runs permission-free checks; live UI validation is an explicit local step.
 
-Architecture: `CLI/` owns parsing, metadata, safety rules and checks; `Accessibility/` owns UIA nodes and traversal; `Input/` owns Win32/clipboard events. `Program.cs` is the entrypoint. Run both Windows checks after changing input or safety behavior; preserve the macOS Swift self-test in macOS CI.
+Architecture: `src/main.rs` is the entry point; `registry.rs`, `invocation.rs` and `guards.rs` own the CLI contract; `desktop.rs` and `node.rs` own UIA traversal; `native.rs`, `input.rs` and `clipboard.rs` own Win32 input and resource lifetimes. `self_test.rs` and `fixture.rs` provide validation. Run both Windows checks after changing input or safety behavior; preserve the macOS Swift self-test in macOS CI.

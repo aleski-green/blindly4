@@ -1,0 +1,3 @@
+[target.'cfg(windows)']
+# Packages are standalone native executables on both MSVC and LLVM-MinGW.
+rustflags = ["-C", "target-feature=+crt-static"]

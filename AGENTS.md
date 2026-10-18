@@ -2,7 +2,7 @@
 
 ## Purpose
 
-blindly4 has a macOS Swift implementation and a Windows C# implementation for reading and operating the accessibility
+blindly4 has a macOS Swift implementation and a Windows Rust implementation for reading and operating the accessibility
 tree. It does not control VoiceOver. Most commands return JSON so programs and coding
 agents can consume them safely.
 
@@ -10,7 +10,8 @@ agents can consume them safely.
 
 For Windows, read `windows/README.md`, build with `windows/build.ps1`, and run
 `.build/windows/blindly4.exe --self-test`. Add permission-free coverage in
-`windows/CLI/SelfTest.cs`. Input changes also require the explicit interactive
+`windows/src/self_test.rs`. Run `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`,
+and `cargo test --locked` from `windows/`. Input changes also require the explicit interactive
 `--integration-test` against the bundled harmless fixture. The Swift instructions
 below apply to the macOS implementation; retain its existing validation workflow.
 

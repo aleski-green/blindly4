@@ -2,10 +2,12 @@
 
 Blindly4 supports **macOS 13+ and Windows 10/11** with a shared, stateless CLI and native accessibility backends. CI builds and tests macOS, Windows x64 and Windows ARM64.
 
+This fork tracks [aleski-green/blindly4](https://github.com/aleski-green/blindly4) and implements the Windows backend in Rust.
+
 | Operating system | Backend | Build requirements |
 | --- | --- | --- |
 | macOS 13+ | Swift / Apple Accessibility | Swift 6; Accessibility permission for desktop access |
-| Windows 10/11, ARM64 and x64 | C# / Microsoft UI Automation | .NET SDK 10 to build; self-contained packages need no separate .NET install |
+| Windows 10/11, ARM64 and x64 | Rust / Microsoft UI Automation | Stable Rust and MSVC C++ Build Tools with the Windows SDK; native packages need no language runtime |
 
 Windows support was contributed through the [fatmahalqaisi-code/blindly4 fork](https://github.com/fatmahalqaisi-code/blindly4).
 
@@ -16,7 +18,7 @@ Windows support was contributed through the [fatmahalqaisi-code/blindly4 fork](h
 ## Build on macOS
 
 ```sh
-git clone https://github.com/aleski-green/blindly4.git
+git clone https://github.com/fatmahalqaisi-code/blindly4.git
 cd blindly4
 swift build -c release
 ./.build/release/blindly4 request-permission
@@ -26,10 +28,10 @@ Enable the terminal application you used to run the command in **System Settings
 
 ## Build on Windows
 
-From PowerShell with Git and .NET SDK 10 installed:
+From PowerShell with Git, stable Rust, and Visual Studio C++ Build Tools (including the Windows SDK) installed:
 
 ```powershell
-git clone https://github.com/aleski-green/blindly4.git
+git clone https://github.com/fatmahalqaisi-code/blindly4.git
 cd blindly4
 .\windows\build.ps1
 .\.build\windows\blindly4.exe --self-test

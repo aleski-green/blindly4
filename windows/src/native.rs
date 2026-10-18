@@ -1,0 +1,246 @@
+use crate::{
+    error::{Error, Result},
+    guards,
+};
+use serde_json::{Value, json};
+use std::{collections::BTreeMap, thread::sleep, time::Duration};
+use windows::{
+    Win32::{
+        Foundation::*,
+        System::Threading::*,
+        UI::{HiDpi::*, Input::KeyboardAndMouse::*, Shell::ShellExecuteW, WindowsAndMessaging::*},
+    },
+    core::{BOOL, PCWSTR, PWSTR},
+};
+
+pub fn wide(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(Some(0)).collect()
+}
+pub fn dpi_awareness() {
+    unsafe {
+        let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+}
+pub struct Window {
+    pub handle: HWND,
+    pub pid: i32,
+    pub title: String,
+}
+pub fn window_pid(handle: HWND) -> i32 {
+    let mut pid = 0;
+    unsafe {
+        GetWindowThreadProcessId(handle, Some(&mut pid));
+    }
+    pid as i32
+}
+pub fn foreground_pid() -> i32 {
+    window_pid(unsafe { GetForegroundWindow() })
+}
+pub fn windows() -> Result<Vec<Window>> {
+    unsafe extern "system" fn visit(handle: HWND, param: LPARAM) -> BOOL {
+        // EnumWindows calls this synchronously; the Vec remains alive for the call.
+        unsafe {
+            if IsWindowVisible(handle).as_bool() {
+                let mut title = [0u16; 1024];
+                let length = GetWindowTextW(handle, &mut title) as usize;
+                let pid = window_pid(handle);
+                if pid > 0 && length > 0 {
+                    let result = &mut *(param.0 as *mut Vec<Window>);
+                    result.push(Window {
+                        handle,
+                        pid,
+                        title: String::from_utf16_lossy(&title[..length]),
+                    });
+                }
+            }
+        }
+        BOOL(1)
+    }
+    let mut result = Vec::<Window>::new();
+    unsafe {
+        EnumWindows(Some(visit), LPARAM(&mut result as *mut _ as isize))?;
+    }
+    result.sort_by_key(|w| w.handle.0 as isize);
+    Ok(result)
+}
+pub fn process_name(pid: i32) -> String {
+    unsafe {
+        let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid as u32) else {
+            return String::new();
+        };
+        let mut path = [0u16; 32768];
+        let mut length = path.len() as u32;
+        let result = QueryFullProcessImageNameW(
+            process,
+            PROCESS_NAME_WIN32,
+            PWSTR(path.as_mut_ptr()),
+            &mut length,
+        );
+        let _ = CloseHandle(process);
+        if result.is_err() {
+            return String::new();
+        }
+        std::path::Path::new(&String::from_utf16_lossy(&path[..length as usize]))
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()
+    }
+}
+pub fn apps() -> Result<Vec<Value>> {
+    let mut groups = BTreeMap::<i32, Vec<String>>::new();
+    for window in windows()? {
+        groups.entry(window.pid).or_default().push(window.title);
+    }
+    Ok(groups.into_iter().map(|(pid, titles)| json!({"pid": pid, "name": process_name(pid), "bundleIdentifier": null, "frontmost": pid == foreground_pid(), "windows": titles})).collect())
+}
+pub fn require_foreground(pid: i32) -> Result<()> {
+    if pid <= 0 || foreground_pid() != pid {
+        return Err(Error::access(
+            "Input blocked: the intended PID is not the foreground application",
+        ));
+    }
+    Ok(())
+}
+pub fn activate(pid: i32) -> Result<()> {
+    if pid > 0 && foreground_pid() == pid {
+        return Ok(());
+    }
+    let window = windows()?
+        .into_iter()
+        .find(|w| w.pid == pid)
+        .ok_or_else(|| Error::access(format!("No visible window for PID {pid}")))?;
+    unsafe {
+        if IsIconic(window.handle).as_bool() {
+            let _ = ShowWindow(window.handle, SW_RESTORE);
+        }
+        let _ = SetForegroundWindow(window.handle);
+    }
+    for _ in 0..20 {
+        if foreground_pid() == pid {
+            break;
+        }
+        sleep(Duration::from_millis(25));
+    }
+    require_foreground(pid)
+}
+pub fn require_point(pid: i32, x: i32, y: i32) -> Result<()> {
+    let handle = unsafe { GetAncestor(WindowFromPoint(POINT { x, y }), GA_ROOT) };
+    if window_pid(handle) != pid {
+        return Err(Error::access(
+            "Input blocked: the screen point belongs to a different application",
+        ));
+    }
+    Ok(())
+}
+pub fn send(pid: i32, events: &[INPUT]) -> Result<()> {
+    require_foreground(pid)?;
+    if unsafe { SendInput(events, size_of::<INPUT>() as i32) } != events.len() as u32 {
+        return Err(Error::access(
+            "Windows rejected input (possibly an elevated or secure window). Inspect the target before retrying.",
+        ));
+    }
+    Ok(())
+}
+fn key_event(key: u16, up: bool, unicode: bool) -> INPUT {
+    let extended = !unicode && matches!(key, 0x21..=0x28 | 0x2e);
+    INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: VIRTUAL_KEY(if unicode { 0 } else { key }),
+                wScan: if unicode { key } else { 0 },
+                dwFlags: KEYBD_EVENT_FLAGS(
+                    (if up { KEYEVENTF_KEYUP.0 } else { 0 })
+                        | (if unicode { KEYEVENTF_UNICODE.0 } else { 0 })
+                        | (if extended { KEYEVENTF_EXTENDEDKEY.0 } else { 0 }),
+                ),
+                ..Default::default()
+            },
+        },
+    }
+}
+pub fn text(pid: i32, text: &str) -> Result<()> {
+    for c in text.encode_utf16() {
+        send(pid, &[key_event(c, false, true), key_event(c, true, true)])?;
+    }
+    Ok(())
+}
+pub fn key(pid: i32, keys: &[u16]) -> Result<()> {
+    let events: Vec<_> = keys
+        .iter()
+        .map(|k| key_event(*k, false, false))
+        .chain(keys.iter().rev().map(|k| key_event(*k, true, false)))
+        .collect();
+    send(pid, &events)
+}
+pub fn key_named(pid: i32, keys: &str) -> Result<()> {
+    key(pid, &guards::parse_key(keys)?)
+}
+fn mouse(flags: MOUSE_EVENT_FLAGS, data: u32) -> INPUT {
+    INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dwFlags: flags,
+                mouseData: data,
+                ..Default::default()
+            },
+        },
+    }
+}
+pub fn click(pid: i32, x: i32, y: i32) -> Result<()> {
+    require_foreground(pid)?;
+    require_point(pid, x, y)?;
+    unsafe {
+        SetCursorPos(x, y)?;
+    }
+    require_point(pid, x, y)?;
+    send(
+        pid,
+        &[mouse(MOUSEEVENTF_LEFTDOWN, 0), mouse(MOUSEEVENTF_LEFTUP, 0)],
+    )
+}
+pub fn scroll(pid: i32, direction: &str, amount: i32) -> Result<()> {
+    let mut point = POINT::default();
+    unsafe {
+        GetCursorPos(&mut point)?;
+    }
+    require_point(pid, point.x, point.y)?;
+    let delta = amount
+        * 120
+        * if matches!(direction, "down" | "left") {
+            -1
+        } else {
+            1
+        };
+    send(
+        pid,
+        &[mouse(
+            if matches!(direction, "left" | "right") {
+                MOUSEEVENTF_HWHEEL
+            } else {
+                MOUSEEVENTF_WHEEL
+            },
+            delta as u32,
+        )],
+    )
+}
+pub fn open_url(url: &str) -> Result<()> {
+    let operation = wide("open");
+    let url = wide(url);
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            PCWSTR(operation.as_ptr()),
+            PCWSTR(url.as_ptr()),
+            None,
+            None,
+            SW_SHOWNORMAL,
+        )
+    };
+    if result.0 as isize <= 32 {
+        return Err(Error::access("Windows could not open the URL"));
+    }
+    Ok(())
+}

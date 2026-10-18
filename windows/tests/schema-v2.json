@@ -1,0 +1,254 @@
+{
+  "schemaVersion": 2,
+  "platform": "windows",
+  "backend": "UIAutomation",
+  "commands": [
+    {
+      "name": "schema",
+      "usage": "blindly4 schema",
+      "summary": "Print command metadata. Windows UIA retains AX role/action names for compatibility.",
+      "risk": "read-only",
+      "requiresAccessibility": false,
+      "options": []
+    },
+    {
+      "name": "request-permission",
+      "usage": "blindly4 request-permission",
+      "summary": "Windows UI Automation needs no macOS permission. Elevated and secure desktops remain inaccessible.",
+      "risk": "ui-mutation",
+      "requiresAccessibility": false,
+      "options": []
+    },
+    {
+      "name": "apps",
+      "usage": "blindly4 apps",
+      "summary": "List visible GUI applications and PIDs.",
+      "risk": "read-only",
+      "requiresAccessibility": false,
+      "options": []
+    },
+    {
+      "name": "activate",
+      "usage": "blindly4 activate --pid PID",
+      "summary": "Bring an application to the foreground and verify it.",
+      "risk": "ui-mutation",
+      "requiresAccessibility": true,
+      "options": [
+        "pid"
+      ]
+    },
+    {
+      "name": "open",
+      "usage": "blindly4 open --url URL",
+      "summary": "Open an HTTP, HTTPS or Slack URL.",
+      "risk": "ui-mutation",
+      "requiresAccessibility": true,
+      "options": [
+        "url"
+      ]
+    },
+    {
+      "name": "tree",
+      "usage": "blindly4 tree [--pid PID] [--depth N] [--max-nodes N]",
+      "summary": "Read a bounded live accessibility tree.",
+      "risk": "read-only",
+      "requiresAccessibility": true,
+      "options": [
+        "depth",
+        "max-nodes",
+        "pid"
+      ]
+    },
+    {
+      "name": "show",
+      "usage": "blindly4 show [--pid PID] [--depth N]",
+      "summary": "Print a readable live outline with paths.",
+      "risk": "read-only",
+      "requiresAccessibility": true,
+      "options": [
+        "depth",
+        "pid"
+      ]
+    },
+    {
+      "name": "find",
+      "usage": "blindly4 find [--title TEXT] [--role ROLE] [--value TEXT] [--description TEXT] [--pid PID] [--depth N] [--limit N]",
+      "summary": "Search current accessible properties.",
+      "risk": "read-only",
+      "requiresAccessibility": true,
+      "options": [
+        "depth",
+        "description",
+        "limit",
+        "pid",
+        "role",
+        "title",
+        "value"
+      ]
+    },
+    {
+      "name": "focused",
+      "usage": "blindly4 focused [--pid PID]",
+      "summary": "Read the focused control without changing focus.",
+      "risk": "read-only",
+      "requiresAccessibility": true,
+      "options": [
+        "pid"
+      ]
+    },
+    {
+      "name": "inspect",
+      "usage": "blindly4 inspect --path INDEX[.INDEX...] [--pid PID]",
+      "summary": "Inspect one live element.",
+      "risk": "read-only",
+      "requiresAccessibility": true,
+      "options": [
+        "path",
+        "pid"
+      ]
+    },
+    {
+      "name": "actions",
+      "usage": "blindly4 actions --path INDEX[.INDEX...] [--pid PID]",
+      "summary": "List supported actions.",
+      "risk": "read-only",
+      "requiresAccessibility": true,
+      "options": [
+        "path",
+        "pid"
+      ]
+    },
+    {
+      "name": "focus",
+      "usage": "blindly4 focus --path INDEX[.INDEX...] [--pid PID]",
+      "summary": "Focus an element.",
+      "risk": "ui-mutation",
+      "requiresAccessibility": true,
+      "options": [
+        "path",
+        "pid"
+      ]
+    },
+    {
+      "name": "show-menu",
+      "usage": "blindly4 show-menu --path INDEX[.INDEX...] [--pid PID]",
+      "summary": "Expand an accessible menu control when supported.",
+      "risk": "ui-mutation",
+      "requiresAccessibility": true,
+      "options": [
+        "path",
+        "pid"
+      ]
+    },
+    {
+      "name": "scroll-to",
+      "usage": "blindly4 scroll-to --path INDEX[.INDEX...] [--pid PID]",
+      "summary": "Scroll an accessible item into view.",
+      "risk": "ui-mutation",
+      "requiresAccessibility": true,
+      "options": [
+        "path",
+        "pid"
+      ]
+    },
+    {
+      "name": "press",
+      "usage": "blindly4 press --path INDEX[.INDEX...] [--pid PID] [--expect-description TEXT] [--require-selected] [--require-value-path PATH --require-value TEXT]",
+      "summary": "Invoke or select a control; may submit external data.",
+      "risk": "external-commit",
+      "requiresAccessibility": true,
+      "options": [
+        "expect-description",
+        "path",
+        "pid",
+        "require-selected",
+        "require-value",
+        "require-value-path"
+      ]
+    },
+    {
+      "name": "set-value",
+      "usage": "blindly4 set-value --path INDEX[.INDEX...] [--pid PID] --value TEXT",
+      "summary": "Set a writable ValuePattern.",
+      "risk": "ui-mutation",
+      "requiresAccessibility": true,
+      "options": [
+        "path",
+        "pid",
+        "value"
+      ]
+    },
+    {
+      "name": "set-selected-text",
+      "usage": "blindly4 set-selected-text --path INDEX[.INDEX...] [--pid PID] --value TEXT",
+      "summary": "Replace selected text in a focused writable control.",
+      "risk": "ui-mutation",
+      "requiresAccessibility": true,
+      "options": [
+        "path",
+        "pid",
+        "value"
+      ]
+    },
+    {
+      "name": "click",
+      "usage": "blindly4 click --x X --y Y [--pid PID]",
+      "summary": "Click a screen coordinate in the verified target application.",
+      "risk": "ui-mutation",
+      "requiresAccessibility": true,
+      "options": [
+        "pid",
+        "x",
+        "y"
+      ]
+    },
+    {
+      "name": "type",
+      "usage": "blindly4 type --text TEXT [--pid PID]",
+      "summary": "Inject Unicode text into the foreground application.",
+      "risk": "ui-mutation",
+      "requiresAccessibility": true,
+      "options": [
+        "pid",
+        "text"
+      ]
+    },
+    {
+      "name": "paste",
+      "usage": "blindly4 paste --text TEXT [--pid PID] [--target-path PATH]",
+      "summary": "Paste, optionally verifying an exact writable target draft.",
+      "risk": "ui-mutation",
+      "requiresAccessibility": true,
+      "options": [
+        "pid",
+        "target-path",
+        "text"
+      ]
+    },
+    {
+      "name": "scroll",
+      "usage": "blindly4 scroll --direction up|down|left|right [--amount LINES] [--pid PID]",
+      "summary": "Inject bounded wheel input into the foreground application.",
+      "risk": "ui-mutation",
+      "requiresAccessibility": true,
+      "options": [
+        "amount",
+        "direction",
+        "pid"
+      ]
+    },
+    {
+      "name": "key",
+      "usage": "blindly4 key --key KEY [--pid PID] [--target-path PATH --require-value TEXT]",
+      "summary": "Inject a key; a guarded key requires exact focused draft and PID.",
+      "risk": "external-commit",
+      "requiresAccessibility": true,
+      "options": [
+        "key",
+        "pid",
+        "require-value",
+        "target-path"
+      ]
+    }
+  ]
+}

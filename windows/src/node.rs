@@ -1,0 +1,371 @@
+// Preserve Microsoft's names when matching generated UIA constants.
+#![allow(non_upper_case_globals)]
+use crate::{
+    error::{Error, Result},
+    guards, native,
+};
+use serde_json::{Value, json};
+use windows::{
+    Win32::{System::Com::*, UI::Accessibility::*},
+    core::{BSTR, Interface},
+};
+
+#[derive(Clone)]
+pub struct Node {
+    pub element: Option<IUIAutomationElement>,
+    pub pid: i32,
+    pub automation: IUIAutomation,
+}
+impl Node {
+    pub fn root(pid: i32) -> Result<Self> {
+        Ok(Self {
+            element: None,
+            pid,
+            automation: unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)? },
+        })
+    }
+    pub fn with_element(&self, element: IUIAutomationElement) -> Result<Self> {
+        // Fail closed when a stale/cross-process path resolves into another application.
+        if unsafe { element.CurrentProcessId()? } != self.pid {
+            return Err(Error::access(
+                "Target belongs to a different process; rediscover the target",
+            ));
+        }
+        Ok(Self {
+            element: Some(element),
+            pid: self.pid,
+            automation: self.automation.clone(),
+        })
+    }
+    fn element(&self) -> Result<&IUIAutomationElement> {
+        self.element
+            .as_ref()
+            .ok_or_else(|| Error::usage("Choose a control path"))
+    }
+    fn pattern<T: Interface>(&self, id: UIA_PATTERN_ID) -> Result<Option<T>> {
+        let Some(e) = &self.element else {
+            return Ok(None);
+        };
+        // Availability properties distinguish unsupported patterns from dead providers.
+        let available = match id {
+            UIA_InvokePatternId => UIA_IsInvokePatternAvailablePropertyId,
+            UIA_SelectionItemPatternId => UIA_IsSelectionItemPatternAvailablePropertyId,
+            UIA_TogglePatternId => UIA_IsTogglePatternAvailablePropertyId,
+            UIA_ExpandCollapsePatternId => UIA_IsExpandCollapsePatternAvailablePropertyId,
+            UIA_ScrollItemPatternId => UIA_IsScrollItemPatternAvailablePropertyId,
+            UIA_ValuePatternId => UIA_IsValuePatternAvailablePropertyId,
+            UIA_TextPatternId => UIA_IsTextPatternAvailablePropertyId,
+            _ => return Err(Error::unexpected("Unknown UIA pattern")),
+        };
+        unsafe {
+            let value = e.GetCurrentPropertyValue(available)?;
+            if !bool::try_from(&value).map_err(Error::from)? {
+                return Ok(None);
+            }
+            Ok(Some(e.GetCurrentPatternAs::<T>(id)?))
+        }
+    }
+    pub fn role(&self) -> Result<&'static str> {
+        let Some(e) = &self.element else {
+            return Ok("AXApplication");
+        };
+        let control = unsafe { e.CurrentControlType()? };
+        Ok(match control {
+            UIA_EditControlTypeId => {
+                if unsafe { e.CurrentIsPassword()?.as_bool() } {
+                    "AXSecureTextField"
+                } else {
+                    "AXTextField"
+                }
+            }
+            UIA_DocumentControlTypeId => "AXTextArea",
+            UIA_WindowControlTypeId => "AXWindow",
+            UIA_ButtonControlTypeId => "AXButton",
+            UIA_TextControlTypeId => "AXStaticText",
+            UIA_HyperlinkControlTypeId => "AXLink",
+            UIA_CheckBoxControlTypeId => "AXCheckBox",
+            UIA_RadioButtonControlTypeId | UIA_TabItemControlTypeId => "AXRadioButton",
+            UIA_ComboBoxControlTypeId => "AXComboBox",
+            UIA_TabControlTypeId => "AXTabGroup",
+            UIA_ListControlTypeId => "AXList",
+            UIA_ListItemControlTypeId | UIA_TreeItemControlTypeId => "AXRow",
+            UIA_TreeControlTypeId => "AXOutline",
+            UIA_MenuControlTypeId => "AXMenu",
+            UIA_MenuBarControlTypeId => "AXMenuBar",
+            UIA_MenuItemControlTypeId => "AXMenuItem",
+            UIA_ScrollBarControlTypeId => "AXScrollBar",
+            UIA_SliderControlTypeId => "AXSlider",
+            UIA_ImageControlTypeId => "AXImage",
+            UIA_TableControlTypeId | UIA_DataGridControlTypeId => "AXTable",
+            UIA_ProgressBarControlTypeId => "AXProgressIndicator",
+            _ => "AXGroup",
+        })
+    }
+    pub fn value(&self) -> Result<Option<String>> {
+        let Some(e) = &self.element else {
+            return Ok(None);
+        };
+        unsafe {
+            if e.CurrentIsPassword()?.as_bool() {
+                return Ok(None);
+            }
+            if let Some(p) = self.pattern::<IUIAutomationValuePattern>(UIA_ValuePatternId)? {
+                return Ok(Some(p.CurrentValue()?.to_string()));
+            }
+            if let Some(p) = self.pattern::<IUIAutomationTextPattern>(UIA_TextPatternId)? {
+                return Ok(Some(p.DocumentRange()?.GetText(65536)?.to_string()));
+            }
+        }
+        Ok(None)
+    }
+    pub fn writable(&self) -> Result<bool> {
+        let Some(e) = &self.element else {
+            return Ok(false);
+        };
+        unsafe {
+            if e.CurrentIsPassword()?.as_bool()
+                || !e.CurrentIsEnabled()?.as_bool()
+                || !matches!(self.role()?, "AXTextField" | "AXTextArea" | "AXComboBox")
+            {
+                return Ok(false);
+            }
+            match self.pattern::<IUIAutomationValuePattern>(UIA_ValuePatternId)? {
+                Some(p) => Ok(!p.CurrentIsReadOnly()?.as_bool()),
+                None => Ok(false),
+            }
+        }
+    }
+    pub fn has_focus(&self) -> Result<bool> {
+        let Some(e) = &self.element else {
+            return Ok(false);
+        };
+        unsafe {
+            Ok(e.CurrentHasKeyboardFocus()?.as_bool()
+                && self
+                    .automation
+                    .CompareElements(e, &self.automation.GetFocusedElement()?)?
+                    .as_bool())
+        }
+    }
+    pub fn exact_draft(&self, expected: &str) -> Result<bool> {
+        Ok(self.value()?.is_some_and(|v| guards::exact(&v, expected)))
+    }
+    pub fn selected(&self) -> Result<bool> {
+        match self.pattern::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)? {
+            Some(p) => Ok(unsafe { p.CurrentIsSelected()?.as_bool() }),
+            None => Ok(false),
+        }
+    }
+    pub fn actions(&self) -> Result<Vec<&'static str>> {
+        let mut actions = vec![];
+        if self
+            .pattern::<IUIAutomationInvokePattern>(UIA_InvokePatternId)?
+            .is_some()
+            || self
+                .pattern::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)?
+                .is_some()
+            || self
+                .pattern::<IUIAutomationTogglePattern>(UIA_TogglePatternId)?
+                .is_some()
+        {
+            actions.push("AXPress");
+        }
+        if self
+            .pattern::<IUIAutomationExpandCollapsePattern>(UIA_ExpandCollapsePatternId)?
+            .is_some()
+        {
+            actions.push("AXShowMenu");
+        }
+        if self
+            .pattern::<IUIAutomationScrollItemPattern>(UIA_ScrollItemPatternId)?
+            .is_some()
+        {
+            actions.push("AXScrollToVisible");
+        }
+        Ok(actions)
+    }
+    pub fn detail(&self, path: Option<&str>) -> Result<Value> {
+        let mut row = json!({"pid": self.pid, "role": self.role()?});
+        if let Some(path) = path {
+            row["path"] = json!(path);
+        }
+        let Some(e) = &self.element else {
+            row["title"] = json!(native::process_name(self.pid));
+            return Ok(row);
+        };
+        unsafe {
+            let name = e.CurrentName()?.to_string();
+            let help = e.CurrentHelpText()?.to_string();
+            row["title"] = json!(name);
+            row["description"] = json!(if help.is_empty() { name } else { help });
+            row["identifier"] = json!(e.CurrentAutomationId()?.to_string());
+            row["subrole"] = json!(format!(
+                "ControlType.{}",
+                control_name(e.CurrentControlType()?)
+            ));
+            row["value"] = json!(self.value()?);
+            row["enabled"] = json!(e.CurrentIsEnabled()?.as_bool());
+            row["focused"] = json!(e.CurrentHasKeyboardFocus()?.as_bool());
+            row["selected"] = json!(self.selected()?);
+            row["actions"] = json!(self.actions()?);
+            row["attributes"] = json!([
+                "AXRole",
+                "AXTitle",
+                "AXDescription",
+                "AXValue",
+                "AXEnabled",
+                "AXFocused",
+                "AXSelected",
+                "AXPosition",
+                "AXSize"
+            ]);
+            let bounds = e.CurrentBoundingRectangle()?;
+            row["position"] = json!({"x": bounds.left, "y": bounds.top});
+            row["size"] = json!({"width": i64::from(bounds.right) - i64::from(bounds.left), "height": i64::from(bounds.bottom) - i64::from(bounds.top)});
+        }
+        Ok(row)
+    }
+    pub fn children(&self) -> Result<Vec<Self>> {
+        let mut children = vec![];
+        unsafe {
+            if let Some(e) = &self.element {
+                let walker = self.automation.ControlViewWalker()?;
+                let mut child = optional_element(walker.GetFirstChildElement(e))?;
+                while let Some(current) = child {
+                    if children.len() == 10000 {
+                        return Err(Error::access(
+                            "Control has more than 10000 children; narrow the target",
+                        ));
+                    }
+                    children.push(self.with_element(current.clone())?);
+                    child = optional_element(walker.GetNextSiblingElement(&current))?;
+                }
+            } else {
+                for window in native::windows()?.into_iter().filter(|w| w.pid == self.pid) {
+                    children.push(
+                        self.with_element(self.automation.ElementFromHandle(window.handle)?)?,
+                    );
+                }
+            }
+        }
+        Ok(children)
+    }
+    pub fn focus(&self) -> Result<()> {
+        let e = self.element()?;
+        native::activate(self.pid)?;
+        unsafe {
+            e.SetFocus()?;
+        }
+        if !self.has_focus()? {
+            return Err(Error::access("The target did not receive keyboard focus"));
+        }
+        Ok(())
+    }
+    pub fn set_value(&self, text: &str) -> Result<()> {
+        if !self.writable()? {
+            return Err(Error::usage(
+                "Target is not a writable UI Automation text control",
+            ));
+        }
+        unsafe {
+            self.pattern::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
+                .ok_or_else(|| Error::access("ValuePattern disappeared"))?
+                .SetValue(&BSTR::from(text))?;
+        }
+        Ok(())
+    }
+    pub fn press(&self) -> Result<()> {
+        unsafe {
+            if let Some(p) = self.pattern::<IUIAutomationInvokePattern>(UIA_InvokePatternId)? {
+                p.Invoke()?;
+            } else if let Some(p) =
+                self.pattern::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)?
+            {
+                p.Select()?;
+            } else if let Some(p) =
+                self.pattern::<IUIAutomationTogglePattern>(UIA_TogglePatternId)?
+            {
+                p.Toggle()?;
+            } else {
+                return Err(Error::usage("Target does not support AXPress"));
+            }
+        }
+        Ok(())
+    }
+    pub fn expand(&self) -> Result<()> {
+        unsafe {
+            self.pattern::<IUIAutomationExpandCollapsePattern>(UIA_ExpandCollapsePatternId)?
+                .ok_or_else(|| Error::usage("Target does not support AXShowMenu"))?
+                .Expand()?;
+        }
+        Ok(())
+    }
+    pub fn scroll_to(&self) -> Result<()> {
+        unsafe {
+            self.pattern::<IUIAutomationScrollItemPattern>(UIA_ScrollItemPatternId)?
+                .ok_or_else(|| Error::usage("Target does not support AXScrollToVisible"))?
+                .ScrollIntoView()?;
+        }
+        Ok(())
+    }
+}
+// windows-rs reports a successful null COM out pointer as Error::empty (S_OK). This is
+// the documented end-of-siblings sentinel; other provider errors must propagate.
+pub(crate) fn optional_element(
+    result: windows::core::Result<IUIAutomationElement>,
+) -> Result<Option<IUIAutomationElement>> {
+    match result {
+        Ok(e) => Ok(Some(e)),
+        Err(e) if e.code() == windows::Win32::Foundation::S_OK => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+fn control_name(id: UIA_CONTROLTYPE_ID) -> &'static str {
+    const NAMES: &[&str] = &[
+        "Button",
+        "Calendar",
+        "CheckBox",
+        "ComboBox",
+        "Edit",
+        "Hyperlink",
+        "Image",
+        "ListItem",
+        "List",
+        "Menu",
+        "MenuBar",
+        "MenuItem",
+        "ProgressBar",
+        "RadioButton",
+        "ScrollBar",
+        "Slider",
+        "Spinner",
+        "StatusBar",
+        "Tab",
+        "TabItem",
+        "Text",
+        "ToolBar",
+        "ToolTip",
+        "Tree",
+        "TreeItem",
+        "Custom",
+        "Group",
+        "Thumb",
+        "DataGrid",
+        "DataItem",
+        "Document",
+        "SplitButton",
+        "Window",
+        "Pane",
+        "Header",
+        "HeaderItem",
+        "Table",
+        "TitleBar",
+        "Separator",
+        "SemanticZoom",
+        "AppBar",
+    ];
+    id.0.checked_sub(50000)
+        .and_then(|n| NAMES.get(n as usize))
+        .copied()
+        .unwrap_or("Custom")
+}
