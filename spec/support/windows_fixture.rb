@@ -2,6 +2,9 @@ require 'spec_helper'
 
 module WindowsFixture
   def start_fixture
+    # RSpec command-line tags can override configured exclusions.
+    raise 'Live desktop scenarios require Windows and BLINDLY4_LIVE=1' unless Blindly::WINDOWS && ENV['BLINDLY4_LIVE'] == '1'
+
     @fixture_pid = Process.spawn([Blindly::BINARY, Blindly::BINARY], '--test-app',
                                  in: File::NULL, out: File::NULL, err: File::NULL)
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
