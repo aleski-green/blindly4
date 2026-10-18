@@ -26,10 +26,12 @@ impl Node {
     }
     pub fn with_element(&self, element: IUIAutomationElement) -> Result<Self> {
         // Fail closed when a stale/cross-process path resolves into another application.
-        if unsafe { element.CurrentProcessId()? } != self.pid {
-            return Err(Error::access(
-                "Target belongs to a different process; rediscover the target",
-            ));
+        let observed_pid = unsafe { element.CurrentProcessId()? };
+        if observed_pid != self.pid {
+            return Err(Error::access(format!(
+                "Target belongs to a different process (expected {}, observed {observed_pid}); rediscover the target",
+                self.pid
+            )));
         }
         Ok(Self {
             element: Some(element),
@@ -237,7 +239,33 @@ impl Node {
                             "Control has more than 10000 children; narrow the target",
                         ));
                     }
+                    let parent =
+                        optional_element(walker.GetParentElement(&current))?.ok_or_else(|| {
+                            Error::access(
+                                "Accessibility child lost its parent; rediscover the target",
+                            )
+                        })?;
+                    let same_parent = self.automation.CompareElements(e, &parent)?.as_bool();
+                    // Win32 combo boxes expose their open popup list as the first
+                    // child, but that list's Control View parent is the desktop.
+                    // Keep that same-process popup, then stop: its next sibling
+                    // belongs to the desktop, not to this combo box.
+                    let popup = children.is_empty()
+                        && e.CurrentControlType()? == UIA_ComboBoxControlTypeId
+                        && current.CurrentControlType()? == UIA_ListControlTypeId
+                        && self
+                            .automation
+                            .CompareElements(&parent, &self.automation.GetRootElement()?)?
+                            .as_bool();
+                    if !same_parent && !popup {
+                        return Err(Error::access(
+                            "Accessibility child changed parents; rediscover the target",
+                        ));
+                    }
                     children.push(self.with_element(current.clone())?);
+                    if popup {
+                        break;
+                    }
                     child = optional_element(walker.GetNextSiblingElement(&current))?;
                 }
             } else {

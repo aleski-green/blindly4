@@ -1,16 +1,7 @@
 require 'support/windows_fixture'
 
 RSpec.describe 'Windows desktop behavior', :windows, :live do
-  include WindowsFixture
-
-  around do |example|
-    begin
-      start_fixture
-      example.run
-    ensure
-      stop_fixture
-    end
-  end
+  include_context 'a native Windows fixture'
 
   it 'lists the fixture and reads its real accessibility tree to the last child' do
     expect(success('apps').fetch('apps')).to include(a_hash_including('pid' => @fixture_pid))
