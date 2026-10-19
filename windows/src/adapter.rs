@@ -11,9 +11,8 @@ use crate::{
 };
 pub use clipboard::Clipboard;
 pub use native::{
-    PERMISSION_SUMMARY, SCHEMA_SUMMARY, VALUE_SUMMARY, activate_native, activation_pid, apps,
-    click, foreground_pid, key, open_url, parse_key, request_permission, schema, scroll, text,
-    wait,
+    Key, PERMISSION_SUMMARY, SCHEMA_SUMMARY, VALUE_SUMMARY, activate_native, activation_pid, apps,
+    click, foreground_pid, key, key_code, open_url, request_permission, schema, scroll, text, wait,
 };
 pub use node::Node;
 use serde_json::json;
@@ -43,7 +42,7 @@ pub fn prepare(command: &Command, invocation: &Invocation) -> Result<ComApartmen
     if matches!(command.name, "inspect" | "press") {
         Node::application(invocation.pid()?)?;
     }
-    input::validate(command.name, invocation)?;
+    input::validate(command, invocation)?;
     Ok(session)
 }
 pub fn fixture(args: &[String]) -> Option<Result<()>> {
@@ -75,3 +74,7 @@ impl From<windows::core::Error> for Error {
         Self::access(value.to_string())
     }
 }
+
+pub const DESCENDANT_DRAFT: bool = false;
+pub const FOCUS_SELECTION: bool = true;
+pub const VALUE_ERROR: &str = "Target is not a writable UI Automation text control";

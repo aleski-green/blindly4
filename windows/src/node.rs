@@ -1,9 +1,6 @@
 #![allow(non_upper_case_globals)]
 use super::native;
-use crate::{
-    error::{Error, Result},
-    guards,
-};
+use crate::error::{Error, Result};
 use serde_json::{Value, json};
 use windows::{
     Win32::{System::Com::*, UI::Accessibility::*},
@@ -55,170 +52,121 @@ impl Node {
             .as_ref()
             .ok_or_else(|| Error::usage("Choose a control path"))
     }
-    fn available_pattern<T: Interface>(&self, id: UIA_PATTERN_ID) -> Result<Option<T>> {
-        let Some(e) = &self.element else {
-            return Ok(None);
-        };
-        let availability_property = match id {
-            UIA_InvokePatternId => UIA_IsInvokePatternAvailablePropertyId,
-            UIA_SelectionItemPatternId => UIA_IsSelectionItemPatternAvailablePropertyId,
-            UIA_TogglePatternId => UIA_IsTogglePatternAvailablePropertyId,
-            UIA_ExpandCollapsePatternId => UIA_IsExpandCollapsePatternAvailablePropertyId,
-            UIA_ScrollItemPatternId => UIA_IsScrollItemPatternAvailablePropertyId,
-            UIA_ValuePatternId => UIA_IsValuePatternAvailablePropertyId,
-            UIA_TextPatternId => UIA_IsTextPatternAvailablePropertyId,
-            _ => return Err(Error::unexpected("Unknown UIA pattern")),
-        };
-        unsafe {
-            let value = e.GetCurrentPropertyValue(availability_property)?;
-            if !bool::try_from(&value).map_err(Error::from)? {
-                return Ok(None);
-            }
-            Ok(Some(e.GetCurrentPatternAs::<T>(id)?))
-        }
-    }
-    pub fn role(&self) -> Result<&'static str> {
-        let Some(e) = &self.element else {
-            return Ok("AXApplication");
-        };
-        let control = unsafe { e.CurrentControlType()? };
-        Ok(
-            if control == UIA_EditControlTypeId && unsafe { e.CurrentIsPassword()?.as_bool() } {
-                "AXSecureTextField"
-            } else {
-                control_type_names(control).1
-            },
-        )
-    }
-    pub fn value(&self) -> Result<Option<String>> {
+    fn pattern<T: Pattern>(&self) -> Result<Option<T>> {
         let Some(e) = &self.element else {
             return Ok(None);
         };
         unsafe {
-            if e.CurrentIsPassword()?.as_bool() {
+            if !bool::try_from(&e.GetCurrentPropertyValue(T::AVAILABLE)?)? {
                 return Ok(None);
             }
-            if let Some(p) =
-                self.available_pattern::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
-            {
-                return Ok(Some(p.CurrentValue()?.to_string()));
-            }
-            if let Some(p) =
-                self.available_pattern::<IUIAutomationTextPattern>(UIA_TextPatternId)?
-            {
-                return Ok(Some(p.DocumentRange()?.GetText(65536)?.to_string()));
-            }
-        }
-        Ok(None)
-    }
-    pub fn writable(&self) -> Result<bool> {
-        let Some(e) = &self.element else {
-            return Ok(false);
-        };
-        unsafe {
-            if e.CurrentIsPassword()?.as_bool()
-                || !e.CurrentIsEnabled()?.as_bool()
-                || !matches!(self.role()?, "AXTextField" | "AXTextArea" | "AXComboBox")
-            {
-                return Ok(false);
-            }
-            match self.available_pattern::<IUIAutomationValuePattern>(UIA_ValuePatternId)? {
-                Some(p) => Ok(!p.CurrentIsReadOnly()?.as_bool()),
-                None => Ok(false),
-            }
+            Ok(Some(e.GetCurrentPatternAs::<T>(T::ID)?))
         }
     }
-    pub fn has_focus(&self) -> Result<bool> {
-        let Some(e) = &self.element else {
-            return Ok(false);
-        };
-        unsafe {
-            Ok(e.CurrentHasKeyboardFocus()?.as_bool()
-                && self
-                    .automation
-                    .CompareElements(e, &self.automation.GetFocusedElement()?)?
-                    .as_bool())
-        }
+
+    pub fn is_root(&self) -> bool {
+        self.element.is_none()
     }
-    pub fn exact_draft(&self, expected: &str) -> Result<bool> {
-        Ok(self.value()?.is_some_and(|v| guards::exact(&v, expected)))
+    pub fn secure(&self) -> Result<bool> {
+        Ok(!self.is_root() && unsafe { self.element()?.CurrentIsPassword()?.as_bool() })
     }
-    pub fn selected(&self) -> Result<bool> {
-        match self
-            .available_pattern::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)?
-        {
-            Some(p) => Ok(unsafe { p.CurrentIsSelected()?.as_bool() }),
+
+    pub fn value_settable(&self) -> Result<bool> {
+        match self.pattern::<IUIAutomationValuePattern>()? {
+            Some(p) => Ok(!unsafe { p.CurrentIsReadOnly()?.as_bool() }),
             None => Ok(false),
         }
     }
-    pub fn actions(&self) -> Result<Vec<&'static str>> {
-        let mut actions = vec![];
-        if self
-            .available_pattern::<IUIAutomationInvokePattern>(UIA_InvokePatternId)?
-            .is_some()
-            || self
-                .available_pattern::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)?
-                .is_some()
-            || self
-                .available_pattern::<IUIAutomationTogglePattern>(UIA_TogglePatternId)?
-                .is_some()
-        {
-            actions.push("AXPress");
-        }
-        if self
-            .available_pattern::<IUIAutomationExpandCollapsePattern>(UIA_ExpandCollapsePatternId)?
-            .is_some()
-        {
-            actions.push("AXShowMenu");
-        }
-        if self
-            .available_pattern::<IUIAutomationScrollItemPattern>(UIA_ScrollItemPatternId)?
-            .is_some()
-        {
-            actions.push("AXScrollToVisible");
-        }
-        Ok(actions)
+
+    pub fn focus_flag(&self) -> Result<bool> {
+        Ok(!self.is_root() && unsafe { self.element()?.CurrentHasKeyboardFocus()?.as_bool() })
     }
-    pub fn detail(&self, path: Option<&str>) -> Result<Value> {
-        let mut row = json!({"pid": self.pid, "role": self.role()?});
-        if let Some(path) = path {
-            row["path"] = json!(path);
+
+    pub fn actions(&self) -> Result<Vec<&'static str>> {
+        let mut result = vec![];
+        for name in ["AXPress", "AXShowMenu", "AXScrollToVisible"] {
+            if self.action(name, false)? {
+                result.push(name);
+            }
         }
+        Ok(result)
+    }
+    pub fn property(&self, name: &str) -> Result<Option<Value>> {
         let Some(e) = &self.element else {
-            row["title"] = json!(native::process_name(self.pid));
-            return Ok(row);
+            return Ok(match name {
+                "AXRole" => Some(json!("AXApplication")),
+                "AXTitle" => Some(json!(native::process_name(self.pid))),
+                _ => None,
+            });
         };
-        unsafe {
-            let name = e.CurrentName()?.to_string();
-            let help = e.CurrentHelpText()?.to_string();
-            row["title"] = json!(name);
-            row["description"] = json!(if help.is_empty() { name } else { help });
-            row["identifier"] = json!(e.CurrentAutomationId()?.to_string());
-            row["subrole"] = json!(format!(
-                "ControlType.{}",
-                control_type_names(e.CurrentControlType()?).0
-            ));
-            row["value"] = json!(self.value()?);
-            row["enabled"] = json!(e.CurrentIsEnabled()?.as_bool());
-            row["focused"] = json!(e.CurrentHasKeyboardFocus()?.as_bool());
-            row["selected"] = json!(self.selected()?);
-            row["actions"] = json!(self.actions()?);
-            row["attributes"] = json!([
-                "AXRole",
-                "AXTitle",
-                "AXDescription",
-                "AXValue",
-                "AXEnabled",
-                "AXFocused",
-                "AXSelected",
-                "AXPosition",
-                "AXSize"
-            ]);
-            let bounds = e.CurrentBoundingRectangle()?;
-            row["position"] = json!({"x": bounds.left, "y": bounds.top});
-            row["size"] = json!({"width": i64::from(bounds.right) - i64::from(bounds.left), "height": i64::from(bounds.bottom) - i64::from(bounds.top)});
+        Ok(Some(unsafe {
+            match name {
+                "AXRole" => json!(if e.CurrentControlType()? == UIA_EditControlTypeId
+                    && self.secure()?
+                {
+                    "AXSecureTextField"
+                } else {
+                    control_type_names(e.CurrentControlType()?).1
+                }),
+                "AXSubrole" => json!(format!(
+                    "ControlType.{}",
+                    control_type_names(e.CurrentControlType()?).0
+                )),
+                "AXTitle" => json!(e.CurrentName()?.to_string()),
+                "AXDescription" => {
+                    let help = e.CurrentHelpText()?.to_string();
+                    json!(if help.is_empty() {
+                        e.CurrentName()?.to_string()
+                    } else {
+                        help
+                    })
+                }
+                "AXIdentifier" => json!(e.CurrentAutomationId()?.to_string()),
+                "AXEnabled" => json!(e.CurrentIsEnabled()?.as_bool()),
+                "AXFocused" => json!(e.CurrentHasKeyboardFocus()?.as_bool()),
+                "AXSelected" => json!(match self.pattern::<IUIAutomationSelectionItemPattern>()? {
+                    Some(p) => p.CurrentIsSelected()?.as_bool(),
+                    None => false,
+                }),
+                "AXValue" if self.secure()? => Value::Null,
+                "AXValue" => {
+                    if let Some(p) = self.pattern::<IUIAutomationValuePattern>()? {
+                        json!(p.CurrentValue()?.to_string())
+                    } else if let Some(p) = self.pattern::<IUIAutomationTextPattern>()? {
+                        json!(p.DocumentRange()?.GetText(65536)?.to_string())
+                    } else {
+                        Value::Null
+                    }
+                }
+                "AXPosition" | "AXSize" => {
+                    let b = e.CurrentBoundingRectangle()?;
+                    if name == "AXPosition" {
+                        json!({"x": b.left, "y": b.top})
+                    } else {
+                        json!({"width": i64::from(b.right) - i64::from(b.left), "height": i64::from(b.bottom) - i64::from(b.top)})
+                    }
+                }
+                _ => return Ok(None),
+            }
+        }))
+    }
+    pub fn properties(&self) -> Result<std::collections::BTreeMap<String, Value>> {
+        let mut values = std::collections::BTreeMap::new();
+        for name in crate::element::ATTRIBUTES {
+            if let Some(value) = self.property(name)? {
+                values.insert((*name).into(), value);
+            }
         }
-        Ok(row)
+        Ok(values)
+    }
+    pub fn attribute_names(&self) -> Result<Option<Vec<String>>> {
+        Ok((!self.is_root()).then(|| {
+            crate::element::ATTRIBUTES
+                .iter()
+                .filter(|name| !matches!(**name, "AXSubrole" | "AXIdentifier"))
+                .map(|name| (*name).to_owned())
+                .collect()
+        }))
     }
     pub fn children(&self) -> Result<Vec<Self>> {
         let mut children = vec![];
@@ -280,76 +228,30 @@ impl Node {
             _ => false,
         }
     }
-    pub fn check_control(&self) -> Result<()> {
-        self.element().map(|_| ())
-    }
+
     pub fn focus_native(&self) -> Result<()> {
         unsafe {
             self.element()?.SetFocus()?;
         }
         Ok(())
     }
-    pub fn selected_text(&self, text: &str) -> Result<()> {
-        if !self.writable()? {
-            return Err(Error::usage("Target is not a writable text control"));
-        }
-        self.focus()?;
-        crate::application::require_foreground(self.pid)?;
-        if !self.has_focus()? {
-            return Err(Error::access("Target lost focus"));
-        }
+    pub fn selected_text_native(&self, text: &str) -> Result<()> {
         native::text(self.pid, text)
     }
-    pub fn set_value(&self, text: &str) -> Result<()> {
-        if !self.writable()? {
-            return Err(Error::usage(
-                "Target is not a writable UI Automation text control",
-            ));
-        }
+    pub fn set_value_native(&self, text: &str) -> Result<()> {
         unsafe {
-            self.available_pattern::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
+            self.pattern::<IUIAutomationValuePattern>()?
                 .ok_or_else(|| Error::access("ValuePattern disappeared"))?
                 .SetValue(&BSTR::from(text))?;
         }
         Ok(())
     }
-    pub fn press(&self) -> Result<()> {
-        unsafe {
-            if let Some(p) =
-                self.available_pattern::<IUIAutomationInvokePattern>(UIA_InvokePatternId)?
-            {
-                p.Invoke()?;
-            } else if let Some(p) = self.available_pattern::<IUIAutomationSelectionItemPattern>(
-                UIA_SelectionItemPatternId,
-            )? {
-                p.Select()?;
-            } else if let Some(p) =
-                self.available_pattern::<IUIAutomationTogglePattern>(UIA_TogglePatternId)?
-            {
-                p.Toggle()?;
-            } else {
-                return Err(Error::usage("Target does not support AXPress"));
-            }
+    pub fn perform(&self, name: &str) -> Result<()> {
+        if self.action(name, true)? {
+            Ok(())
+        } else {
+            Err(Error::usage(format!("Target does not support {name}")))
         }
-        Ok(())
-    }
-    pub fn expand(&self) -> Result<()> {
-        unsafe {
-            self.available_pattern::<IUIAutomationExpandCollapsePattern>(
-                UIA_ExpandCollapsePatternId,
-            )?
-            .ok_or_else(|| Error::usage("Target does not support AXShowMenu"))?
-            .Expand()?;
-        }
-        Ok(())
-    }
-    pub fn scroll_to(&self) -> Result<()> {
-        unsafe {
-            self.available_pattern::<IUIAutomationScrollItemPattern>(UIA_ScrollItemPatternId)?
-                .ok_or_else(|| Error::usage("Target does not support AXScrollToVisible"))?
-                .ScrollIntoView()?;
-        }
-        Ok(())
     }
 }
 fn nullable_uia_element(
@@ -409,4 +311,37 @@ fn control_type_names(id: UIA_CONTROLTYPE_ID) -> (&'static str, &'static str) {
         .and_then(|n| NAMES.get(n as usize))
         .copied()
         .unwrap_or(("Custom", "AXGroup"))
+}
+
+trait Pattern: Interface {
+    const ID: UIA_PATTERN_ID;
+    const AVAILABLE: UIA_PROPERTY_ID;
+}
+macro_rules! patterns {
+    ($($kind:ty, $id:ident, $available:ident $(, $action:literal, $method:ident)?;)*) => {
+        $(impl Pattern for $kind {
+            const ID: UIA_PATTERN_ID = $id;
+            const AVAILABLE: UIA_PROPERTY_ID = $available;
+        })*
+        impl Node {
+            fn action(&self, name: &str, execute: bool) -> Result<bool> {
+                $($(if name == $action {
+                    if let Some(pattern) = self.pattern::<$kind>()? {
+                        if execute { unsafe { pattern.$method()?; } }
+                        return Ok(true);
+                    }
+                })?)*
+                Ok(false)
+            }
+        }
+    };
+}
+patterns! {
+    IUIAutomationInvokePattern, UIA_InvokePatternId, UIA_IsInvokePatternAvailablePropertyId, "AXPress", Invoke;
+    IUIAutomationSelectionItemPattern, UIA_SelectionItemPatternId, UIA_IsSelectionItemPatternAvailablePropertyId, "AXPress", Select;
+    IUIAutomationTogglePattern, UIA_TogglePatternId, UIA_IsTogglePatternAvailablePropertyId, "AXPress", Toggle;
+    IUIAutomationExpandCollapsePattern, UIA_ExpandCollapsePatternId, UIA_IsExpandCollapsePatternAvailablePropertyId, "AXShowMenu", Expand;
+    IUIAutomationScrollItemPattern, UIA_ScrollItemPatternId, UIA_IsScrollItemPatternAvailablePropertyId, "AXScrollToVisible", ScrollIntoView;
+    IUIAutomationValuePattern, UIA_ValuePatternId, UIA_IsValuePatternAvailablePropertyId;
+    IUIAutomationTextPattern, UIA_TextPatternId, UIA_IsTextPatternAvailablePropertyId;
 }

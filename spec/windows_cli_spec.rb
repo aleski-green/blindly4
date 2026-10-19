@@ -21,4 +21,12 @@ RSpec.describe 'The Windows CLI contract', :windows do
     expect(result.status).to eq(77)
     expect(result.json).to include('error' => "No visible windows for PID #{Process.pid}")
   end
+  it 'accepts Windows function keys and numeric aliases before refusing an absent target' do
+    %w[f01 f13 f24].each do |key|
+      result = cli('key', '--key', key, '--pid', '2147483647')
+      expect(result.status).to eq(77)
+      expect(result.json).to include('code' => 'accessibility_error')
+    end
+  end
+
 end

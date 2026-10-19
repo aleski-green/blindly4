@@ -121,4 +121,20 @@ RSpec.describe 'The public CLI' do
       usage_error(*arguments)
     end
   end
+  ['RETURN', 'ctrl+alt+shift+a', 'cmd+v', 'command+control+option+shift+F12',
+   '9', 'forward-delete', 'pageup', 'pagedown'].each do |key|
+    it "accepts the key grammar before refusing an absent target: #{key}" do
+      result = cli('key', '--key', key, '--pid', '2147483647')
+      expect(result.status).to eq(77)
+      expect(%w[accessibility_error accessibility_permission_denied]).to include(result.json.fetch('code'))
+    end
+  end
+
+  [%w[activate], %w[open], %w[click --x 0], %w[type], %w[paste],
+   %w[key], %w[scroll], %w[set-value --path 0], %w[set-selected-text --path 0]].each do |arguments|
+    it "rejects missing required values before desktop work: #{arguments.inspect}" do
+      usage_error(*arguments)
+    end
+  end
+
 end

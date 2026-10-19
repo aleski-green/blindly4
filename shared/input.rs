@@ -7,57 +7,58 @@ use crate::{
 use serde_json::{Value, json};
 
 // Validate syntax before requesting Accessibility access or touching the UI.
-pub fn validate(command: &str, i: &Invocation) -> Result<()> {
-    if i.has("pid") {
-        i.integer("pid", 0, 1, i32::MAX)?;
+pub fn validate(command: &crate::registry::Command, i: &Invocation) -> Result<()> {
+    for (name, min, max) in [
+        ("pid", 1, i32::MAX),
+        ("depth", 0, 64),
+        ("max-nodes", 1, 10000),
+        ("limit", 1, 10000),
+        ("amount", 1, 100),
+    ] {
+        if i.has(name) {
+            i.integer(name, min, min, max)?;
+        }
     }
     for name in ["path", "target-path", "require-value-path"] {
         if let Some(value) = i.optional(name) {
             guards::path(value)?;
         }
     }
-    match command {
-        "activate" => {
-            i.value("pid")?;
-        }
+    let required: &[&str] = match command.name {
+        "activate" => &["pid"],
+        "open" => &["url"],
+        "inspect" | "actions" | "focus" | "show-menu" | "scroll-to" | "press" => &["path"],
+        "set-value" | "set-selected-text" => &["path", "value"],
+        "click" => &["x", "y"],
+        "type" | "paste" => &["text"],
+        "key" => &["key"],
+        "scroll" => &["direction"],
+        _ => &[],
+    };
+    for name in required {
+        i.value(name)?;
+    }
+    match command.name {
         "open" => guards::url(i.value("url")?)?,
-        "tree" | "show" | "find" => {
-            i.integer("depth", 4, 0, 64)?;
-            if command == "tree" {
-                i.integer("max-nodes", 250, 1, 10000)?;
-            }
-            if command == "find" {
-                i.integer("limit", 25, 1, 10000)?;
-                if !["title", "role", "value", "description"]
-                    .iter()
-                    .any(|name| i.has(name))
-                {
-                    return Err(Error::usage("find requires a search filter"));
-                }
-            }
-        }
-        "inspect" | "actions" | "focus" | "show-menu" | "scroll-to" => {
-            i.value("path")?;
-        }
-        "press" => {
-            i.value("path")?;
-            i.pair("require-value-path", "require-value", false)?;
-        }
-        "set-value" | "set-selected-text" => {
-            i.value("path")?;
-            i.value("value")?;
-        }
         "click" => {
             coordinates(i)?;
         }
-        "type" | "paste" => {
-            i.value("text")?;
-            if i.has("target-path") && !i.has("pid") {
-                return Err(Error::usage("paste --target-path requires --pid"));
-            }
+        "scroll" => {
+            direction(i)?;
+        }
+        "find"
+            if !["title", "role", "value", "description"]
+                .iter()
+                .any(|name| i.has(name)) =>
+        {
+            return Err(Error::usage("find requires a search filter"));
+        }
+        "press" => i.pair("require-value-path", "require-value", false)?,
+        "paste" if i.has("target-path") && !i.has("pid") => {
+            return Err(Error::usage("paste --target-path requires --pid"));
         }
         "key" => {
-            platform::parse_key(i.value("key")?)?;
+            crate::keyboard::parse(i.value("key")?)?;
             i.pair("target-path", "require-value", true)?;
             if i.has("target-path")
                 && (i.value("target-path")?.is_empty()
@@ -69,10 +70,6 @@ pub fn validate(command: &str, i: &Invocation) -> Result<()> {
                     "Guarded key requires a nonempty target path and draft",
                 ));
             }
-        }
-        "scroll" => {
-            direction(i)?;
-            i.integer("amount", 3, 1, 100)?;
         }
         _ => {}
     }
@@ -121,7 +118,7 @@ pub fn type_text(i: &Invocation) -> Result<()> {
 }
 pub fn key(i: &Invocation) -> Result<()> {
     let key = i.value("key")?;
-    let parsed = platform::parse_key(key)?;
+    let parsed = crate::keyboard::parse(key)?;
     let pid = target(i)?;
     if let Some(path) = i.optional("target-path") {
         Node::application(pid)?
@@ -192,7 +189,7 @@ pub fn paste(i: &Invocation) -> Result<()> {
         }
         // Pasting an empty string is already complete after the verified clear.
         if !text.is_empty() || path.is_none() {
-            platform::key(pid, &platform::parse_key("command+v")?)?;
+            platform::key(pid, &crate::keyboard::parse("command+v")?)?;
         }
         if path.is_some() {
             for _ in 0..100 {

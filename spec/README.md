@@ -30,7 +30,7 @@ runtime is used. Windows builds use `windows/build.ps1`.
   and character-count/PID compatibility checks for both platforms.
 
 - `cli_spec.rb`: shared command discovery, help, risk classifications, numeric/URL/key
-  validation, guard requirements, option rejection, and invocation-local profiling.
+  validation, native key aliases, required arguments, guard requirements, option rejection, and invocation-local profiling.
 - `windows_cli_spec.rb`: the complete Windows schema-v2 fixture and native error precedence.
 - `windows_desktop_spec.rb`: real UI Automation and SendInput against a local
   native window, including traversal bounds, Unicode paste/type, exact matching,

@@ -5,6 +5,7 @@ mod error;
 mod guards;
 mod input;
 mod invocation;
+mod keyboard;
 #[path = "../adapters/mod.rs"]
 mod platform;
 mod registry;

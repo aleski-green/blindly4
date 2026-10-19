@@ -41,10 +41,13 @@ If automation is needed, do it every `{T}` minutes/hours.
 
 ## Architecture
 
-- `shared/`: one entry point, command engine, validation, activation, input workflows, and traversal
+- `shared/`: command engine, key grammar, validation, activation, traversal, control policies, and JSON assembly
 - `adapters/mod.rs`: compile-time platform selection; shared code must contain no OS branches
 - `macos/src/`: macOS adapter, AX/AppKit/Quartz operations, clipboard, and fixture
 - `windows/src/`: Windows adapter, UI Automation/Win32 operations, clipboard, and fixture
+
+Adapters provide native properties, identity, capabilities, and operations. Keep writable-control,
+secure-value, exact-draft, and key-syntax rules in the shared layer; do not duplicate them per OS.
 - `spec/`: shared CLI and platform desktop behavior, all in RSpec
 
 Commands are declared once in `shared/registry.rs`. Keep their summary, risk,

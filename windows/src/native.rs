@@ -247,25 +247,23 @@ pub const VALUE_SUMMARY: &str = "Set a writable ValuePattern.";
 
 pub struct Key(Vec<u16>);
 
-pub fn parse_key(text: &str) -> Result<Key> {
-    let lower = text.to_lowercase();
-    let parts: Vec<_> = lower.split('+').collect();
-    let mut keys = Vec::new();
-    for modifier in &parts[..parts.len() - 1] {
-        keys.push(match *modifier {
-            "ctrl" | "control" | "command" | "cmd" => 0x11,
-            "shift" => 0x10,
-            "alt" | "option" => 0x12,
-            _ => return Err(Error::usage(format!("Unsupported modifier: {modifier}"))),
-        });
+impl Key {
+    pub fn new(code: u16, modifiers: &[usize]) -> Self {
+        let mut keys: Vec<_> = modifiers
+            .iter()
+            .map(|&i| [0x11, 0x11, 0x12, 0x10][i])
+            .collect();
+        keys.push(code);
+        Self(keys)
     }
-    let key = parts[parts.len() - 1];
-    let value = match key {
-        "return" | "enter" => 0x0d,
+}
+pub fn key_code(key: &str) -> Option<u16> {
+    Some(match key {
+        "enter" => 0x0d,
         "tab" => 9,
-        "escape" | "esc" => 0x1b,
+        "escape" => 0x1b,
         "space" => 0x20,
-        "delete" | "backspace" => 8,
+        "backspace" => 8,
         "forward-delete" => 0x2e,
         "up" => 0x26,
         "down" => 0x28,
@@ -278,17 +276,15 @@ pub fn parse_key(text: &str) -> Result<Key> {
         _ if key.len() == 1 && key.as_bytes()[0].is_ascii_alphanumeric() => {
             key.as_bytes()[0].to_ascii_uppercase() as u16
         }
-        _ => match key
-            .strip_prefix('f')
-            .and_then(|s| s.parse::<u16>().ok())
-            .filter(|f| (1..=24).contains(f))
-        {
-            Some(f) => 0x70 + f - 1,
-            None => return Err(Error::usage(format!("Unsupported key: {key}"))),
-        },
-    };
-    keys.push(value);
-    Ok(Key(keys))
+        _ => {
+            0x70 + key
+                .strip_prefix('f')?
+                .parse::<u16>()
+                .ok()
+                .filter(|f| (1..=24).contains(f))?
+                - 1
+        }
+    })
 }
 
 pub fn wait(seconds: f64) {

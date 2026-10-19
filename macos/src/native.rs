@@ -96,33 +96,73 @@ pub fn click(pid: i32, x: f64, y: f64) -> Result<()> {
     .map_err(|_| Error::access("Could not create mouse event"))?;
     let up = CGEvent::new_mouse_event(source, CGEventType::LeftMouseUp, point, CGMouseButton::Left)
         .map_err(|_| Error::access("Could not create mouse event"))?;
+    post(pid, &[down, up])
+}
+fn post(pid: i32, events: &[CGEvent]) -> Result<()> {
     require_foreground(pid)?;
-    down.post(CGEventTapLocation::HID);
-    up.post(CGEventTapLocation::HID);
+    for event in events {
+        event.post(CGEventTapLocation::HID);
+    }
+    // Keep events and their retained sources alive until Quartz has consumed them.
     wait(0.05);
     Ok(())
 }
+fn keyboard_events(code: u16) -> Result<[CGEvent; 2]> {
+    let source = source()?;
+    let [down, up] = [true, false].map(|pressed| {
+        CGEvent::new_keyboard_event(source.clone(), code, pressed)
+            .map_err(|_| Error::access("Could not create key event"))
+    });
+    Ok([down?, up?])
+}
 pub struct Key(u16, CGEventFlags);
 
-pub fn parse_key(text: &str) -> Result<Key> {
-    let lower = text.to_lowercase();
-    let parts: Vec<_> = lower.split('+').collect();
-    let mut flags = CGEventFlags::empty();
-    for modifier in &parts[..parts.len() - 1] {
-        flags |= match *modifier {
-            "command" | "cmd" => CGEventFlags::CGEventFlagCommand,
-            "control" | "ctrl" => CGEventFlags::CGEventFlagControl,
-            "option" | "alt" => CGEventFlags::CGEventFlagAlternate,
-            "shift" => CGEventFlags::CGEventFlagShift,
-            _ => return Err(Error::usage(format!("Unsupported modifier: {modifier}"))),
-        };
+impl Key {
+    pub fn new(code: u16, modifiers: &[usize]) -> Self {
+        let flags = [
+            CGEventFlags::CGEventFlagCommand,
+            CGEventFlags::CGEventFlagControl,
+            CGEventFlags::CGEventFlagAlternate,
+            CGEventFlags::CGEventFlagShift,
+        ];
+        Self(
+            code,
+            modifiers
+                .iter()
+                .fold(CGEventFlags::empty(), |all, &i| all | flags[i]),
+        )
     }
-    let code = match parts[parts.len() - 1] {
-        "return" | "enter" => 36,
+}
+pub fn key_code(key: &str) -> Option<u16> {
+    // Quartz codes are physical positions, not ASCII values.
+    const LETTERS: [u16; 26] = [
+        0, 11, 8, 2, 14, 3, 5, 4, 34, 38, 40, 37, 46, 45, 31, 35, 12, 15, 1, 17, 32, 9, 13, 7, 16,
+        6,
+    ];
+    const DIGITS: [u16; 10] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25];
+    const FUNCTIONS: [u16; 12] = [122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111];
+    if key.len() == 1 {
+        match key.as_bytes()[0] {
+            b'a'..=b'z' => return Some(LETTERS[(key.as_bytes()[0] - b'a') as usize]),
+            b'0'..=b'9' => return Some(DIGITS[(key.as_bytes()[0] - b'0') as usize]),
+            _ => {}
+        }
+    }
+    if let Some(number) = key.strip_prefix('f').and_then(|s| s.parse::<usize>().ok()) {
+        // Preserve the Mac grammar: f01 is not an alias for f1.
+        if key == format!("f{number}") {
+            return number
+                .checked_sub(1)
+                .and_then(|i| FUNCTIONS.get(i))
+                .copied();
+        }
+    }
+    Some(match key {
+        "enter" => 36,
         "tab" => 48,
         "space" => 49,
-        "escape" | "esc" => 53,
-        "delete" | "backspace" => 51,
+        "escape" => 53,
+        "backspace" => 51,
         "forward-delete" => 117,
         "left" => 123,
         "right" => 124,
@@ -132,71 +172,15 @@ pub fn parse_key(text: &str) -> Result<Key> {
         "end" => 119,
         "pageup" => 116,
         "pagedown" => 121,
-        "a" => 0,
-        "b" => 11,
-        "c" => 8,
-        "d" => 2,
-        "e" => 14,
-        "f" => 3,
-        "g" => 5,
-        "h" => 4,
-        "i" => 34,
-        "j" => 38,
-        "k" => 40,
-        "l" => 37,
-        "m" => 46,
-        "n" => 45,
-        "o" => 31,
-        "p" => 35,
-        "q" => 12,
-        "r" => 15,
-        "s" => 1,
-        "t" => 17,
-        "u" => 32,
-        "v" => 9,
-        "w" => 13,
-        "x" => 7,
-        "y" => 16,
-        "z" => 6,
-        "0" => 29,
-        "1" => 18,
-        "2" => 19,
-        "3" => 20,
-        "4" => 21,
-        "5" => 23,
-        "6" => 22,
-        "7" => 26,
-        "8" => 28,
-        "9" => 25,
-        "f1" => 122,
-        "f2" => 120,
-        "f3" => 99,
-        "f4" => 118,
-        "f5" => 96,
-        "f6" => 97,
-        "f7" => 98,
-        "f8" => 100,
-        "f9" => 101,
-        "f10" => 109,
-        "f11" => 103,
-        "f12" => 111,
-        key => return Err(Error::usage(format!("Unsupported key: {key}"))),
-    };
-    Ok(Key(code, flags))
+        _ => return None,
+    })
 }
 pub fn key(pid: i32, key: &Key) -> Result<()> {
-    let source = source()?;
-    let down = CGEvent::new_keyboard_event(source.clone(), key.0, true)
-        .map_err(|_| Error::access("Could not create key event"))?;
-    let up = CGEvent::new_keyboard_event(source, key.0, false)
-        .map_err(|_| Error::access("Could not create key event"))?;
-    down.set_flags(key.1);
-    up.set_flags(key.1);
-    require_foreground(pid)?;
-    down.post(CGEventTapLocation::HID);
-    up.post(CGEventTapLocation::HID);
-    wait(0.05);
-    Ok(())
+    let events = keyboard_events(key.0)?;
+    for event in &events {
+        event.set_flags(key.1);
+    }
+    post(pid, &events)
 }
 pub fn text(pid: i32, text: &str) -> Result<()> {
     // Quartz limits Unicode event payloads. Chunk on scalar boundaries, never in
@@ -205,19 +189,12 @@ pub fn text(pid: i32, text: &str) -> Result<()> {
     let mut units = 0;
     for c in text.chars().chain(std::iter::once('\0')) {
         if (units + c.len_utf16() > 20 || c == '\0') && !chunk.is_empty() {
-            let source = source()?;
-            let down = CGEvent::new_keyboard_event(source.clone(), 0, true)
-                .map_err(|_| Error::access("Could not create text event"))?;
-            let up = CGEvent::new_keyboard_event(source, 0, false)
-                .map_err(|_| Error::access("Could not create text event"))?;
-            down.set_string(&chunk);
-            up.set_string(&chunk);
-            down.set_flags(CGEventFlags::empty());
-            up.set_flags(CGEventFlags::empty());
-            require_foreground(pid)?;
-            down.post(CGEventTapLocation::HID);
-            up.post(CGEventTapLocation::HID);
-            wait(0.05);
+            let events = keyboard_events(0)?;
+            for event in &events {
+                event.set_string(&chunk);
+                event.set_flags(CGEventFlags::empty());
+            }
+            post(pid, &events)?;
             chunk.clear();
             units = 0;
         }
@@ -238,8 +215,5 @@ pub fn scroll(pid: i32, direction: &str, amount: i32) -> Result<()> {
     let event =
         CGEvent::new_scroll_event(source()?, ScrollEventUnit::LINE, 2, vertical, horizontal, 0)
             .map_err(|_| Error::access("Could not create scroll event"))?;
-    require_foreground(pid)?;
-    event.post(CGEventTapLocation::HID);
-    wait(0.05);
-    Ok(())
+    post(pid, &[event])
 }

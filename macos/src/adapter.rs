@@ -7,9 +7,8 @@ mod node;
 use crate::{error::Result, input, invocation::Invocation, registry::Command};
 pub use clipboard::Clipboard;
 pub use native::{
-    PERMISSION_SUMMARY, SCHEMA_SUMMARY, VALUE_SUMMARY, activate_native, activation_pid, apps,
-    click, foreground_pid, key, open_url, parse_key, request_permission, schema, scroll, text,
-    wait,
+    Key, PERMISSION_SUMMARY, SCHEMA_SUMMARY, VALUE_SUMMARY, activate_native, activation_pid, apps,
+    click, foreground_pid, key, key_code, open_url, request_permission, schema, scroll, text, wait,
 };
 pub use node::Node;
 use std::time::Duration;
@@ -22,7 +21,7 @@ pub fn with_runtime(run: impl FnOnce() -> Result<()>) -> Result<()> {
     objc2::rc::autoreleasepool(|_| run())
 }
 pub fn prepare(command: &Command, invocation: &Invocation) -> Result<Session> {
-    input::validate(command.name, invocation)?;
+    input::validate(command, invocation)?;
     if command.accessibility {
         ax::require_accessibility()?;
     }
@@ -76,3 +75,7 @@ pub fn mutation_key(action: &str) -> &'static str {
         "action"
     }
 }
+
+pub const DESCENDANT_DRAFT: bool = true;
+pub const FOCUS_SELECTION: bool = false;
+pub const VALUE_ERROR: &str = "Target is not a writable text control";
