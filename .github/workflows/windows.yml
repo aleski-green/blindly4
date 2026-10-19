@@ -23,7 +23,7 @@ jobs:
         run: |
           cargo fmt --check
           if ($LASTEXITCODE) { throw 'Formatting failed' }
-          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --all-targets -- -D warnings
           if ($LASTEXITCODE) { throw 'Clippy failed' }
       - name: Build native executable
         shell: pwsh
@@ -31,9 +31,10 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
-          bundler-cache: true
       - name: RSpec CLI behavior
-        run: bundle exec rspec
+        run: |
+          bundle install
+          bundle exec rspec
       - uses: actions/upload-artifact@v4
         with:
           name: blindly4-${{ matrix.runtime }}

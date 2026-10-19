@@ -4,7 +4,7 @@ The Windows implementation is a native Rust CLI backed by Microsoft UI Automatio
 
 ## Build and run
 
-Requires Windows 10/11, stable Rust (edition 2024), and Visual Studio C++ Build Tools with the Windows SDK to build with the default MSVC toolchain. Install the C++ tools for the target architecture. The executable requires no separately installed language runtime, administrator access, or WSL. Dependencies are pinned in `Cargo.lock`; builds use `--locked`.
+Requires Windows 10/11, stable Rust (edition 2024), and Visual Studio C++ Build Tools with the Windows SDK to build with the default MSVC toolchain. Install the C++ tools for the target architecture. The executable requires no separately installed language runtime, administrator access, or WSL.
 
 ```powershell
 git clone https://github.com/fatmahalqaisi-code/blindly4.git
@@ -37,7 +37,7 @@ bundle install
 bundle exec rspec
 ```
 
-The default suite checks the public schema, help, errors, argument validation, and profiling without desktop access. From `windows/`, also run the static checks `cargo fmt --check` and `cargo clippy --locked --all-targets -- -D warnings`. No unit tests or embedded self-test runners remain.
+The default suite checks the public schema, help, errors, argument validation, and profiling without desktop access. From `windows/`, also run the static checks `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`. No unit tests or embedded self-test runners remain.
 
 On an unlocked interactive Windows desktop, run:
 

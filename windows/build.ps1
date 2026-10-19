@@ -12,7 +12,7 @@ $build = Join-Path $repo '.build/rust'
 $destination = Join-Path $PSScriptRoot '../.build/windows'
 Push-Location $repo
 try {
-    cargo build --locked --release --manifest-path (Join-Path $PSScriptRoot 'Cargo.toml') --target $target --target-dir $build
+    cargo build --release --manifest-path (Join-Path $PSScriptRoot 'Cargo.toml') --target $target --target-dir $build
     if ($LASTEXITCODE -ne 0) { throw 'Blindly4 build failed' }
 } finally {
     Pop-Location
@@ -21,5 +21,4 @@ New-Item -ItemType Directory -Path $destination -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $build "$target/release/blindly4.exe") -Destination $destination -Force
 Copy-Item -LiteralPath (Join-Path $repo 'license') -Destination $destination -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $repo 'README.md') -Destination (Join-Path $destination 'README.md') -Force
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'THIRD_PARTY_NOTICES.md') -Destination $destination -Force
 Write-Host "Blindly4: $destination/blindly4.exe"

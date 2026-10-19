@@ -7,3 +7,6 @@ windows/target/
 vendor/bundle/
 
 macos/target/
+Cargo.lock
+Gemfile.lock
+THIRD_PARTY_NOTICES.md

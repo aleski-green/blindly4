@@ -14,8 +14,7 @@ bundle exec rspec
 
 The default executable is `.build/windows/blindly4.exe` on Windows and
 `.build/debug/blindly4` on macOS. Set `BLINDLY4_BIN` to test another build. RSpec fails
-if the binary is missing or no examples are selected. Dependencies are pinned in
-`Gemfile.lock`; Ruby and the gems are development dependencies only.
+if the binary is missing or no examples are selected. Ruby and the gems are development dependencies only.
 
 Build macOS with `./macos/build.sh debug` (or release with `./macos/build.sh` and
 `BLINDLY4_BIN=.build/release/blindly4`). No Swift compiler, Swift package, or .NET

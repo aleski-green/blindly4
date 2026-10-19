@@ -8,7 +8,7 @@ case "$profile" in
   *) echo 'Usage: macos/build.sh [release|debug]' >&2; exit 64 ;;
 esac
 export MACOSX_DEPLOYMENT_TARGET=13.0
-cargo build --locked $release --manifest-path "$repo/macos/Cargo.toml" --target-dir "$repo/.build/macos-rust"
+cargo build $release --manifest-path "$repo/macos/Cargo.toml" --target-dir "$repo/.build/macos-rust"
 mkdir -p "$repo/.build/$profile"
 cp "$repo/.build/macos-rust/$profile/blindly4" "$repo/.build/$profile/blindly4"
 printf 'Blindly4: %s\n' "$repo/.build/$profile/blindly4"

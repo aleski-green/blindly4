@@ -18,17 +18,18 @@ jobs:
       - name: Rust format and lint
         run: |
           cargo fmt --manifest-path macos/Cargo.toml --check
-          cargo clippy --locked --manifest-path macos/Cargo.toml --all-targets -- -D warnings
+          cargo clippy --manifest-path macos/Cargo.toml --all-targets -- -D warnings
       - name: Native release build
         run: ./macos/build.sh
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
-          bundler-cache: true
       - name: RSpec CLI behavior
         env:
           BLINDLY4_BIN: .build/release/blindly4
-        run: bundle exec rspec
+        run: |
+          bundle install
+          bundle exec rspec
       - name: Package native binary
         uses: actions/upload-artifact@v4
         with:
@@ -36,7 +37,6 @@ jobs:
           path: |
             .build/release/blindly4
             license/
-            macos/THIRD_PARTY_NOTICES.md
             README.md
           if-no-files-found: error
           include-hidden-files: true
