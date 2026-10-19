@@ -17,19 +17,14 @@ impl Invocation {
             let key = arg
                 .strip_prefix("--")
                 .filter(|k| options.contains(k))
-                .ok_or_else(|| {
-                    Error::usage(format!("Unknown option for {}: {arg}", command.name))
-                })?;
+                .ok_or_else(|| Error::usage(format!("Unknown option for {}: {arg}", command.name)))?;
             if values.contains_key(key) {
                 return Err(Error::usage(format!("Duplicate option --{key}")));
             }
             let value = if key == "require-selected" {
                 "true".to_owned()
             } else {
-                args.next()
-                    .filter(|v| !v.starts_with("--"))
-                    .ok_or_else(|| Error::usage(format!("Missing value for --{key}")))?
-                    .clone()
+                args.next().filter(|v| !v.starts_with("--")).ok_or_else(|| Error::usage(format!("Missing value for --{key}")))?.clone()
             };
             values.insert(key.to_owned(), value);
         }
@@ -39,8 +34,7 @@ impl Invocation {
         self.values.get(name).map(String::as_str)
     }
     pub fn value(&self, name: &str) -> Result<&str> {
-        self.optional(name)
-            .ok_or_else(|| Error::usage(format!("Missing --{name}")))
+        self.optional(name).ok_or_else(|| Error::usage(format!("Missing --{name}")))
     }
     pub fn has(&self, name: &str) -> bool {
         self.values.contains_key(name)
@@ -68,10 +62,7 @@ impl Invocation {
     }
     pub fn pair(&self, a: &str, b: &str, require_pid: bool) -> Result<()> {
         if self.has(a) != self.has(b) || (self.has(a) && require_pid && !self.has("pid")) {
-            return Err(Error::usage(format!(
-                "--{a} and --{b} must be supplied together{}",
-                if require_pid { " with --pid" } else { "" }
-            )));
+            return Err(Error::usage(format!("--{a} and --{b} must be supplied together{}", if require_pid { " with --pid" } else { "" })));
         }
         Ok(())
     }

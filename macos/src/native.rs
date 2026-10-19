@@ -2,17 +2,12 @@ use super::ax;
 use crate::application::require_foreground;
 use crate::error::{Error, Result};
 use core_graphics::{
-    event::{
-        CGEvent, CGEventFlags, CGEventTapLocation, CGEventType, CGMouseButton, ScrollEventUnit,
-    },
+    event::{CGEvent, CGEventFlags, CGEventTapLocation, CGEventType, CGMouseButton, ScrollEventUnit},
     event_source::{CGEventSource, CGEventSourceStateID},
     geometry::CGPoint,
 };
 use objc2::rc::Retained;
-use objc2_app_kit::{
-    NSApplicationActivationOptions, NSApplicationActivationPolicy, NSRunningApplication,
-    NSWorkspace,
-};
+use objc2_app_kit::{NSApplicationActivationOptions, NSApplicationActivationPolicy, NSRunningApplication, NSWorkspace};
 use objc2_foundation::{NSDate, NSRunLoop, NSString, NSURL};
 use serde_json::{Value, json};
 
@@ -43,9 +38,7 @@ pub fn foreground_pid() -> i32 {
     // Pump it before every check so a mid-command focus change cannot use a
     // cached foreground PID. AXFocusedApplication is not supported by every host.
     wait(0.001);
-    NSWorkspace::sharedWorkspace()
-        .frontmostApplication()
-        .map_or(0, |app| app.processIdentifier())
+    NSWorkspace::sharedWorkspace().frontmostApplication().map_or(0, |app| app.processIdentifier())
 }
 
 pub fn require_app(pid: i32) -> Result<Retained<NSRunningApplication>> {
@@ -68,17 +61,11 @@ pub fn activate_native(pid: i32) -> Result<()> {
     Ok(())
 }
 pub fn open_url(value: &str) -> Result<()> {
-    let url = NSURL::URLWithString(&NSString::from_str(value))
-        .ok_or_else(|| Error::usage("Invalid URL"))?;
-    if NSWorkspace::sharedWorkspace().openURL(&url) {
-        Ok(())
-    } else {
-        Err(Error::access("Could not open URL"))
-    }
+    let url = NSURL::URLWithString(&NSString::from_str(value)).ok_or_else(|| Error::usage("Invalid URL"))?;
+    if NSWorkspace::sharedWorkspace().openURL(&url) { Ok(()) } else { Err(Error::access("Could not open URL")) }
 }
 fn source() -> Result<CGEventSource> {
-    CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-        .map_err(|_| Error::access("Could not create event source"))
+    CGEventSource::new(CGEventSourceStateID::HIDSystemState).map_err(|_| Error::access("Could not create event source"))
 }
 pub fn click(pid: i32, x: f64, y: f64) -> Result<()> {
     require_foreground(pid)?;
@@ -87,13 +74,8 @@ pub fn click(pid: i32, x: f64, y: f64) -> Result<()> {
     }
     let source = source()?;
     let point = CGPoint::new(x, y);
-    let down = CGEvent::new_mouse_event(
-        source.clone(),
-        CGEventType::LeftMouseDown,
-        point,
-        CGMouseButton::Left,
-    )
-    .map_err(|_| Error::access("Could not create mouse event"))?;
+    let down = CGEvent::new_mouse_event(source.clone(), CGEventType::LeftMouseDown, point, CGMouseButton::Left)
+        .map_err(|_| Error::access("Could not create mouse event"))?;
     let up = CGEvent::new_mouse_event(source, CGEventType::LeftMouseUp, point, CGMouseButton::Left)
         .map_err(|_| Error::access("Could not create mouse event"))?;
     post(pid, &[down, up])
@@ -109,10 +91,8 @@ fn post(pid: i32, events: &[CGEvent]) -> Result<()> {
 }
 fn keyboard_events(code: u16) -> Result<[CGEvent; 2]> {
     let source = source()?;
-    let [down, up] = [true, false].map(|pressed| {
-        CGEvent::new_keyboard_event(source.clone(), code, pressed)
-            .map_err(|_| Error::access("Could not create key event"))
-    });
+    let [down, up] = [true, false]
+        .map(|pressed| CGEvent::new_keyboard_event(source.clone(), code, pressed).map_err(|_| Error::access("Could not create key event")));
     Ok([down?, up?])
 }
 pub struct Key(u16, CGEventFlags);
@@ -125,20 +105,12 @@ impl Key {
             CGEventFlags::CGEventFlagAlternate,
             CGEventFlags::CGEventFlagShift,
         ];
-        Self(
-            code,
-            modifiers
-                .iter()
-                .fold(CGEventFlags::empty(), |all, &i| all | flags[i]),
-        )
+        Self(code, modifiers.iter().fold(CGEventFlags::empty(), |all, &i| all | flags[i]))
     }
 }
 pub fn key_code(key: &str) -> Option<u16> {
     // Quartz codes are physical positions, not ASCII values.
-    const LETTERS: [u16; 26] = [
-        0, 11, 8, 2, 14, 3, 5, 4, 34, 38, 40, 37, 46, 45, 31, 35, 12, 15, 1, 17, 32, 9, 13, 7, 16,
-        6,
-    ];
+    const LETTERS: [u16; 26] = [0, 11, 8, 2, 14, 3, 5, 4, 34, 38, 40, 37, 46, 45, 31, 35, 12, 15, 1, 17, 32, 9, 13, 7, 16, 6];
     const DIGITS: [u16; 10] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25];
     const FUNCTIONS: [u16; 12] = [122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111];
     if key.len() == 1 {
@@ -151,10 +123,7 @@ pub fn key_code(key: &str) -> Option<u16> {
     if let Some(number) = key.strip_prefix('f').and_then(|s| s.parse::<usize>().ok()) {
         // Preserve the Mac grammar: f01 is not an alias for f1.
         if key == format!("f{number}") {
-            return number
-                .checked_sub(1)
-                .and_then(|i| FUNCTIONS.get(i))
-                .copied();
+            return number.checked_sub(1).and_then(|i| FUNCTIONS.get(i)).copied();
         }
     }
     Some(match key {
@@ -212,8 +181,7 @@ pub fn scroll(pid: i32, direction: &str, amount: i32) -> Result<()> {
         "left" => (0, amount),
         _ => (0, -amount),
     };
-    let event =
-        CGEvent::new_scroll_event(source()?, ScrollEventUnit::LINE, 2, vertical, horizontal, 0)
-            .map_err(|_| Error::access("Could not create scroll event"))?;
+    let event = CGEvent::new_scroll_event(source()?, ScrollEventUnit::LINE, 2, vertical, horizontal, 0)
+        .map_err(|_| Error::access("Could not create scroll event"))?;
     post(pid, &[event])
 }

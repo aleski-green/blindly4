@@ -28,15 +28,9 @@ pub fn path(text: &str) -> Result<Vec<usize>> {
         .collect()
 }
 pub fn url(value: &str) -> Result<()> {
-    let parsed = url::Url::parse(value)
-        .map_err(|_| Error::usage("Only absolute HTTP, HTTPS or Slack URLs are supported"))?;
-    if !matches!(parsed.scheme(), "http" | "https" | "slack")
-        || parsed.host_str().is_none_or(str::is_empty)
-        || value.contains('\0')
-    {
-        return Err(Error::usage(
-            "Only absolute HTTP, HTTPS or Slack URLs are supported",
-        ));
+    let parsed = url::Url::parse(value).map_err(|_| Error::usage("Only absolute HTTP, HTTPS or Slack URLs are supported"))?;
+    if !matches!(parsed.scheme(), "http" | "https" | "slack") || parsed.host_str().is_none_or(str::is_empty) || value.contains('\0') {
+        return Err(Error::usage("Only absolute HTTP, HTTPS or Slack URLs are supported"));
     }
     Ok(())
 }

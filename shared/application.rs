@@ -5,9 +5,7 @@ use crate::{
 
 pub fn require_foreground(pid: i32) -> Result<()> {
     if pid <= 0 || platform::foreground_pid() != pid {
-        return Err(Error::access(
-            "Target application is not frontmost; refusing cross-app input",
-        ));
+        return Err(Error::access("Target application is not frontmost; refusing cross-app input"));
     }
     Ok(())
 }

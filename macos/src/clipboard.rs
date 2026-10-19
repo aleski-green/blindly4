@@ -18,9 +18,8 @@ impl Clipboard {
             for item in items.iter() {
                 let copy = NSPasteboardItem::new();
                 for kind in item.types().iter() {
-                    let data = item.dataForType(&kind).ok_or_else(|| {
-                        Error::access("Clipboard format could not be preserved; paste cancelled")
-                    })?;
+                    let data =
+                        item.dataForType(&kind).ok_or_else(|| Error::access("Clipboard format could not be preserved; paste cancelled"))?;
                     if !copy.setData_forType(&data, &kind) {
                         return Err(Error::access("Could not preserve clipboard data"));
                     }
@@ -29,53 +28,32 @@ impl Clipboard {
             }
         }
         if board.changeCount() != count {
-            return Err(Error::access(
-                "Clipboard changed while being captured; paste cancelled",
-            ));
+            return Err(Error::access("Clipboard changed while being captured; paste cancelled"));
         }
-        Ok(Self {
-            board,
-            saved,
-            owned_change: None,
-            captured_change: count,
-        })
+        Ok(Self { board, saved, owned_change: None, captured_change: count })
     }
     pub fn replace(&mut self, text: &str) -> Result<()> {
         if self.board.changeCount() != self.captured_change {
-            return Err(Error::access(
-                "Clipboard changed before paste; newer contents were left intact",
-            ));
+            return Err(Error::access("Clipboard changed before paste; newer contents were left intact"));
         }
         self.owned_change = Some(self.board.clearContents());
-        let ok = self.board.setString_forType(
-            &NSString::from_str(text),
-            &NSString::from_str("public.utf8-plain-text"),
-        );
+        let ok = self.board.setString_forType(&NSString::from_str(text), &NSString::from_str("public.utf8-plain-text"));
         self.owned_change = Some(self.board.changeCount());
-        if ok {
-            Ok(())
-        } else {
-            Err(Error::access("Could not place text on pasteboard"))
-        }
+        if ok { Ok(()) } else { Err(Error::access("Could not place text on pasteboard")) }
     }
     pub fn restore(&mut self) -> Result<()> {
         let Some(count) = self.owned_change.take() else {
             return Ok(());
         };
         if self.board.changeCount() != count {
-            return Err(Error::access(
-                "Clipboard changed during paste; newer contents were left intact",
-            ));
+            return Err(Error::access("Clipboard changed during paste; newer contents were left intact"));
         }
         self.board.clearContents();
         if self.saved.is_empty() {
             return Ok(());
         }
-        let items: Vec<&ProtocolObject<dyn NSPasteboardWriting>> = self
-            .saved
-            .iter()
-            .map(|item| ProtocolObject::from_ref(&**item))
-            .collect();
+        let items: Vec<&ProtocolObject<dyn NSPasteboardWriting>> =
+            self.saved.iter().map(|item| ProtocolObject::from_ref(&**item)).collect();
         if self.board.writeObjects(&NSArray::from_slice(&items)) {
             Ok(())
         } else {
@@ -122,23 +100,17 @@ pub fn fixture() -> Result<()> {
             let mut items = vec![];
             for row in rows {
                 let item = NSPasteboardItem::new();
-                for (kind, bytes) in row
-                    .as_object()
-                    .ok_or_else(|| Error::usage("Expected clipboard item"))?
-                {
+                for (kind, bytes) in row.as_object().ok_or_else(|| Error::usage("Expected clipboard item"))? {
                     let bytes: Vec<u8> = serde_json::from_value(bytes.clone())?;
-                    if !item.setData_forType(&NSData::with_bytes(&bytes), &NSString::from_str(kind))
-                    {
+                    if !item.setData_forType(&NSData::with_bytes(&bytes), &NSString::from_str(kind)) {
                         return Err(Error::access("Fixture clipboard write failed"));
                     }
                 }
                 items.push(item);
             }
             original.board.clearContents();
-            let objects: Vec<&ProtocolObject<dyn NSPasteboardWriting>> = items
-                .iter()
-                .map(|item| ProtocolObject::from_ref(&**item))
-                .collect();
+            let objects: Vec<&ProtocolObject<dyn NSPasteboardWriting>> =
+                items.iter().map(|item| ProtocolObject::from_ref(&**item)).collect();
             if !objects.is_empty() && !original.board.writeObjects(&NSArray::from_slice(&objects)) {
                 return Err(Error::access("Fixture clipboard write failed"));
             }

@@ -47,9 +47,7 @@ fn main() {
         args.retain(|arg| arg != "--profile");
         std::thread::spawn(|| {
             std::thread::sleep(Duration::from_secs(25));
-            report(&Error::access(
-                "Accessibility command timed out; inspect the target before retrying input.",
-            ));
+            report(&Error::access("Accessibility command timed out; inspect the target before retrying input."));
             std::process::exit(77);
         });
         let result = run(&args);

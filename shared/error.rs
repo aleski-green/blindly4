@@ -11,25 +11,13 @@ pub struct Error {
 
 impl Error {
     pub fn usage(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            exit: 64,
-            code: "usage_error",
-        }
+        Self { message: message.into(), exit: 64, code: "usage_error" }
     }
     pub fn access(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            exit: 77,
-            code: "accessibility_error",
-        }
+        Self { message: message.into(), exit: 77, code: "accessibility_error" }
     }
     pub fn unexpected(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            exit: 1,
-            code: "unexpected_error",
-        }
+        Self { message: message.into(), exit: 1, code: "unexpected_error" }
     }
 }
 impl fmt::Display for Error {

@@ -17,16 +17,8 @@ pub struct Command {
 }
 impl Command {
     pub fn options(&self) -> Vec<&str> {
-        let mut options: Vec<_> = self
-            .arguments
-            .split("--")
-            .skip(1)
-            .map(|s| {
-                s.split(|c: char| !c.is_ascii_lowercase() && c != '-')
-                    .next()
-                    .unwrap()
-            })
-            .collect();
+        let mut options: Vec<_> =
+            self.arguments.split("--").skip(1).map(|s| s.split(|c: char| !c.is_ascii_lowercase() && c != '-').next().unwrap()).collect();
         options.sort_unstable();
         options.dedup();
         options
@@ -37,30 +29,14 @@ impl Command {
 }
 macro_rules! command {
     ($name:literal, $args:expr, $summary:expr, $risk:literal, $access:literal, $execute:expr) => {
-        Command {
-            name: $name,
-            arguments: $args,
-            summary: $summary,
-            risk: $risk,
-            accessibility: $access,
-            execute: $execute,
-        }
+        Command { name: $name, arguments: $args, summary: $summary, risk: $risk, accessibility: $access, execute: $execute }
     };
 }
 const PATH_ARGS: &str = "--path INDEX[.INDEX...] [--pid PID]";
 pub static ALL: &[Command] = &[
-    command!(
-        "schema",
-        "",
-        platform::SCHEMA_SUMMARY,
-        "read-only",
-        false,
-        |_| {
-            crate::json(&platform::schema(
-                ALL.iter().map(Command::metadata).collect(),
-            ))
-        }
-    ),
+    command!("schema", "", platform::SCHEMA_SUMMARY, "read-only", false, |_| {
+        crate::json(&platform::schema(ALL.iter().map(Command::metadata).collect()))
+    }),
     command!(
         "request-permission",
         "",
@@ -69,40 +45,21 @@ pub static ALL: &[Command] = &[
         false,
         |_| crate::json(&platform::request_permission())
     ),
-    command!(
-        "apps",
-        "",
-        "List visible GUI applications and PIDs.",
-        "read-only",
-        false,
-        |_| crate::json(&json!({"apps": platform::apps()?}))
-    ),
-    command!(
-        "activate",
-        "--pid PID",
-        "Bring an application to the foreground and verify it.",
-        "ui-mutation",
-        true,
-        |i| {
-            i.value("pid")?;
-            let pid = i.pid()?;
-            crate::application::activate(pid)?;
-            crate::json(&json!({"pid": platform::activation_pid(pid), "ok": true}))
-        }
-    ),
-    command!(
-        "open",
-        "--url URL",
-        "Open an HTTP, HTTPS or Slack URL.",
-        "ui-mutation",
-        true,
-        |i| {
-            let url = i.value("url")?;
-            guards::url(url)?;
-            platform::open_url(url)?;
-            crate::json(&json!({"url": url, "ok": true}))
-        }
-    ),
+    command!("apps", "", "List visible GUI applications and PIDs.", "read-only", false, |_| crate::json(
+        &json!({"apps": platform::apps()?})
+    )),
+    command!("activate", "--pid PID", "Bring an application to the foreground and verify it.", "ui-mutation", true, |i| {
+        i.value("pid")?;
+        let pid = i.pid()?;
+        crate::application::activate(pid)?;
+        crate::json(&json!({"pid": platform::activation_pid(pid), "ok": true}))
+    }),
+    command!("open", "--url URL", "Open an HTTP, HTTPS or Slack URL.", "ui-mutation", true, |i| {
+        let url = i.value("url")?;
+        guards::url(url)?;
+        platform::open_url(url)?;
+        crate::json(&json!({"url": url, "ok": true}))
+    }),
     command!(
         "tree",
         "[--pid PID] [--depth N] [--max-nodes N]",
@@ -111,14 +68,7 @@ pub static ALL: &[Command] = &[
         true,
         desktop::tree
     ),
-    command!(
-        "show",
-        "[--pid PID] [--depth N]",
-        "Print a readable live outline with paths.",
-        "read-only",
-        true,
-        desktop::show
-    ),
+    command!("show", "[--pid PID] [--depth N]", "Print a readable live outline with paths.", "read-only", true, desktop::show),
     command!(
         "find",
         "[--title TEXT] [--role ROLE] [--value TEXT] [--description TEXT] [--pid PID] [--depth N] [--limit N]",
@@ -127,60 +77,24 @@ pub static ALL: &[Command] = &[
         true,
         desktop::find
     ),
-    command!(
-        "focused",
-        "[--pid PID]",
-        "Read the focused control without changing focus.",
-        "read-only",
-        true,
-        desktop::focused
-    ),
-    command!(
-        "inspect",
-        PATH_ARGS,
-        "Inspect one live element.",
-        "read-only",
-        true,
-        |i| crate::json(
-            &Node::application(i.pid()?)?
-                .resolve(i.value("path")?)?
-                .detail(None)?
-        )
-    ),
-    command!(
-        "actions",
-        PATH_ARGS,
-        "List supported actions.",
-        "read-only",
-        true,
-        |i| crate::json(
-            &json!({"path": i.value("path")?, "actions": Node::application(i.pid()?)?.resolve(i.value("path")?)?.actions()?})
-        )
-    ),
-    command!(
-        "focus",
-        PATH_ARGS,
-        "Focus an element.",
-        "ui-mutation",
-        true,
-        |i| desktop::mutate(i, "AXFocused", Node::focus)
-    ),
-    command!(
-        "show-menu",
-        PATH_ARGS,
-        "Expand an accessible menu control when supported.",
-        "ui-mutation",
-        true,
-        |i| desktop::mutate(i, "AXShowMenu", Node::expand)
-    ),
-    command!(
-        "scroll-to",
-        PATH_ARGS,
-        "Scroll an accessible item into view.",
-        "ui-mutation",
-        true,
-        |i| desktop::mutate(i, "AXScrollToVisible", Node::scroll_to)
-    ),
+    command!("focused", "[--pid PID]", "Read the focused control without changing focus.", "read-only", true, desktop::focused),
+    command!("inspect", PATH_ARGS, "Inspect one live element.", "read-only", true, |i| crate::json(
+        &Node::application(i.pid()?)?.resolve(i.value("path")?)?.detail(None)?
+    )),
+    command!("actions", PATH_ARGS, "List supported actions.", "read-only", true, |i| crate::json(
+        &json!({"path": i.value("path")?, "actions": Node::application(i.pid()?)?.resolve(i.value("path")?)?.actions()?})
+    )),
+    command!("focus", PATH_ARGS, "Focus an element.", "ui-mutation", true, |i| desktop::mutate(i, "AXFocused", Node::focus)),
+    command!("show-menu", PATH_ARGS, "Expand an accessible menu control when supported.", "ui-mutation", true, |i| desktop::mutate(
+        i,
+        "AXShowMenu",
+        Node::expand
+    )),
+    command!("scroll-to", PATH_ARGS, "Scroll an accessible item into view.", "ui-mutation", true, |i| desktop::mutate(
+        i,
+        "AXScrollToVisible",
+        Node::scroll_to
+    )),
     command!(
         "press",
         "--path INDEX[.INDEX...] [--pid PID] [--expect-description TEXT] [--require-selected] [--require-value-path PATH --require-value TEXT]",
@@ -189,17 +103,10 @@ pub static ALL: &[Command] = &[
         true,
         desktop::press
     ),
-    command!(
-        "set-value",
-        "--path INDEX[.INDEX...] [--pid PID] --value TEXT",
-        platform::VALUE_SUMMARY,
-        "ui-mutation",
-        true,
-        |i| {
-            let value = i.value("value")?;
-            desktop::mutate(i, "AXValue", |n| n.set_value(value))
-        }
-    ),
+    command!("set-value", "--path INDEX[.INDEX...] [--pid PID] --value TEXT", platform::VALUE_SUMMARY, "ui-mutation", true, |i| {
+        let value = i.value("value")?;
+        desktop::mutate(i, "AXValue", |n| n.set_value(value))
+    }),
     command!(
         "set-selected-text",
         "--path INDEX[.INDEX...] [--pid PID] --value TEXT",
@@ -250,19 +157,11 @@ pub static ALL: &[Command] = &[
     ),
 ];
 pub fn get(name: &str) -> Result<&'static Command> {
-    ALL.iter()
-        .find(|c| c.name == name)
-        .ok_or_else(|| Error::usage(format!("Unknown command: {name}")))
+    ALL.iter().find(|c| c.name == name).ok_or_else(|| Error::usage(format!("Unknown command: {name}")))
 }
 pub fn help() -> String {
     format!(
         "Blindly4 — native accessibility, stateless CLI\n{}\nGlobal: --profile. Paths are live: rediscover before input. Serialize desktop workflows.",
-        ALL.iter()
-            .map(|c| format!(
-                "  {} {}\n    {} [{}]",
-                c.name, c.arguments, c.summary, c.risk
-            ))
-            .collect::<Vec<_>>()
-            .join("\n")
+        ALL.iter().map(|c| format!("  {} {}\n    {} [{}]", c.name, c.arguments, c.summary, c.risk)).collect::<Vec<_>>().join("\n")
     )
 }

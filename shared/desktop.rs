@@ -29,11 +29,7 @@ pub fn tree(i: &Invocation) -> Result<()> {
     let tree = build(&root, depth, &mut remaining, &mut truncated)?;
     crate::json(&json!({"tree": tree, "truncated": truncated}))
 }
-fn walk_bounded_depth_first(
-    root: Node,
-    depth: i32,
-    mut visit: impl FnMut(&Node, &str) -> Result<bool>,
-) -> Result<bool> {
+fn walk_bounded_depth_first(root: Node, depth: i32, mut visit: impl FnMut(&Node, &str) -> Result<bool>) -> Result<bool> {
     let mut stack = vec![(root, String::new(), depth)];
     let mut count = 0;
     while let Some((node, path, depth)) = stack.pop() {
@@ -46,11 +42,7 @@ fn walk_bounded_depth_first(
         }
         if depth > 0 {
             for (index, child) in node.children()?.into_iter().enumerate().rev() {
-                let next = if path.is_empty() {
-                    index.to_string()
-                } else {
-                    format!("{path}.{index}")
-                };
+                let next = if path.is_empty() { index.to_string() } else { format!("{path}.{index}") };
                 stack.push((child, next, depth - 1));
             }
         }
@@ -75,14 +67,10 @@ pub fn show(i: &Invocation) -> Result<()> {
     Ok(())
 }
 pub fn find(i: &Invocation) -> Result<()> {
-    let filters: Vec<_> = ["title", "role", "value", "description"]
-        .into_iter()
-        .filter_map(|k| i.optional(k).map(|v| (k, v.to_lowercase())))
-        .collect();
+    let filters: Vec<_> =
+        ["title", "role", "value", "description"].into_iter().filter_map(|k| i.optional(k).map(|v| (k, v.to_lowercase()))).collect();
     if filters.is_empty() {
-        return Err(Error::usage(
-            "find requires --title, --role, --value or --description",
-        ));
+        return Err(Error::usage("find requires --title, --role, --value or --description"));
     }
     let limit = i.integer("limit", 25, 1, 10000)? as usize;
     let depth = i.integer("depth", 8, 0, 64)?;
@@ -91,11 +79,7 @@ pub fn find(i: &Invocation) -> Result<()> {
         let row = node.detail(Some(path))?;
         if filters.iter().all(|(k, v)| {
             let actual = row[*k].as_str().unwrap_or("");
-            if *k == "role" {
-                platform::role_matches(actual, v)
-            } else {
-                actual.to_lowercase().contains(v)
-            }
+            if *k == "role" { platform::role_matches(actual, v) } else { actual.to_lowercase().contains(v) }
         }) {
             matches.push(row);
         }
@@ -105,22 +89,14 @@ pub fn find(i: &Invocation) -> Result<()> {
 }
 pub fn focused(i: &Invocation) -> Result<()> {
     let pid = i.pid()?;
-    let unavailable = || Error {
-        message: "No focused control in the requested application".into(),
-        exit: 77,
-        code: "focus_unavailable",
-    };
+    let unavailable = || Error { message: "No focused control in the requested application".into(), exit: 77, code: "focus_unavailable" };
     if i.has("pid") && platform::foreground_pid() != pid {
         return Err(unavailable());
     }
     let node = Node::root(pid)?.focused().map_err(|_| unavailable())?;
     crate::json(&node.detail(None)?)
 }
-pub fn mutate(
-    i: &Invocation,
-    action: &str,
-    mutate: impl FnOnce(&Node) -> Result<()>,
-) -> Result<()> {
+pub fn mutate(i: &Invocation, action: &str, mutate: impl FnOnce(&Node) -> Result<()>) -> Result<()> {
     let path = i.value("path")?;
     mutate(&Node::application(i.pid()?)?.resolve(path)?)?;
     let key = platform::mutation_key(action);
@@ -132,25 +108,13 @@ pub fn press(i: &Invocation) -> Result<()> {
     let path = i.value("path")?;
     let target = root.resolve(path)?;
     if let Some(expected) = i.optional("expect-description") {
-        if !target.detail(None)?["description"]
-            .as_str()
-            .unwrap_or("")
-            .to_lowercase()
-            .contains(&expected.to_lowercase())
-        {
-            return Err(Error::usage(
-                "press target does not match --expect-description",
-            ));
+        if !target.detail(None)?["description"].as_str().unwrap_or("").to_lowercase().contains(&expected.to_lowercase()) {
+            return Err(Error::usage("press target does not match --expect-description"));
         }
     }
     if let Some(draft_path) = i.optional("require-value-path") {
-        if !root
-            .resolve(draft_path)?
-            .exact_draft(i.value("require-value")?)?
-        {
-            return Err(Error::access(
-                "Press blocked: the draft does not exactly match --require-value",
-            ));
+        if !root.resolve(draft_path)?.exact_draft(i.value("require-value")?)? {
+            return Err(Error::access("Press blocked: the draft does not exactly match --require-value"));
         }
     }
     if !target.same(&root.resolve(path)?) {
@@ -165,9 +129,7 @@ pub fn press(i: &Invocation) -> Result<()> {
             platform::wait(0.05);
         }
         if !target.selected()? {
-            return Err(Error::access(
-                "Press completed but target was not selected; do not continue",
-            ));
+            return Err(Error::access("Press completed but target was not selected; do not continue"));
         }
     }
     let mut result = json!({"path": path, "action": "AXPress", "ok": true});

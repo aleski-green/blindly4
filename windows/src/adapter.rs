@@ -11,8 +11,8 @@ use crate::{
 };
 pub use clipboard::Clipboard;
 pub use native::{
-    Key, PERMISSION_SUMMARY, SCHEMA_SUMMARY, VALUE_SUMMARY, activate_native, activation_pid, apps,
-    click, foreground_pid, key, key_code, open_url, request_permission, schema, scroll, text, wait,
+    Key, PERMISSION_SUMMARY, SCHEMA_SUMMARY, VALUE_SUMMARY, activate_native, activation_pid, apps, click, foreground_pid, key, key_code,
+    open_url, request_permission, schema, scroll, text, wait,
 };
 pub use node::Node;
 use serde_json::json;

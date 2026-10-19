@@ -19,32 +19,20 @@ impl Node {
     }
     pub fn application(pid: i32) -> Result<Self> {
         native::require_app(pid)?;
-        Ok(Self {
-            element: ax::application(pid)?,
-            pid,
-            root: true,
-        })
+        Ok(Self { element: ax::application(pid)?, pid, root: true })
     }
     fn child(&self, element: CFType) -> Result<Self> {
         let element = ax::element(element)?;
         if ax::pid(&element)? != self.pid {
-            return Err(Error::access(
-                "Accessibility target changed process; rediscover it",
-            ));
+            return Err(Error::access("Accessibility target changed process; rediscover it"));
         }
-        Ok(Self {
-            element,
-            pid: self.pid,
-            root: false,
-        })
+        Ok(Self { element, pid: self.pid, root: false })
     }
     pub fn same(&self, other: &Self) -> bool {
         self.element == other.element
     }
     pub fn property(&self, name: &str) -> Result<Option<Value>> {
-        Ok(ax::attribute(&self.element, name)?
-            .as_ref()
-            .and_then(ax::json_value))
+        Ok(ax::attribute(&self.element, name)?.as_ref().and_then(ax::json_value))
     }
 
     pub fn secure(&self) -> Result<bool> {
@@ -62,8 +50,8 @@ impl Node {
         Ok(true)
     }
     pub fn focused(&self) -> Result<Self> {
-        let focused = ax::attribute(&ax::application(self.pid)?, "AXFocusedUIElement")?
-            .ok_or_else(|| Error::access("No focused element"))?;
+        let focused =
+            ax::attribute(&ax::application(self.pid)?, "AXFocusedUIElement")?.ok_or_else(|| Error::access("No focused element"))?;
         self.child(focused)
     }
 
@@ -82,22 +70,13 @@ impl Node {
         };
         let values = ax::array(&value)?;
         if values.len() > 10000 {
-            return Err(Error::access(
-                "Too many accessibility children; narrow the target",
-            ));
+            return Err(Error::access("Too many accessibility children; narrow the target"));
         }
-        values
-            .into_iter()
-            .map(|element| self.child(element))
-            .collect()
+        values.into_iter().map(|element| self.child(element)).collect()
     }
     pub fn children(&self) -> Result<Vec<Self>> {
         let mut children = self.children_attribute("AXChildren")?;
-        if self.root
-            && !children
-                .iter()
-                .any(|n| n.role().is_ok_and(|role| role == "AXWindow"))
-        {
+        if self.root && !children.iter().any(|n| n.role().is_ok_and(|role| role == "AXWindow")) {
             for window in self.children_attribute("AXWindows")? {
                 if !children.iter().any(|child| child.same(&window)) {
                     children.push(window);

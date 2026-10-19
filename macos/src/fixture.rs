@@ -2,13 +2,10 @@
 use crate::error::{Error, Result};
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, rc::Retained, sel};
 use objc2_app_kit::{
-    NSAccessibility, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSButton,
-    NSMenu, NSMenuItem, NSPopUpButton, NSScrollView, NSSecureTextField, NSTextField, NSView,
-    NSWindow, NSWindowStyleMask,
+    NSAccessibility, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSButton, NSMenu, NSMenuItem, NSPopUpButton,
+    NSScrollView, NSSecureTextField, NSTextField, NSView, NSWindow, NSWindowStyleMask,
 };
-use objc2_foundation::{
-    MainThreadMarker, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
-};
+use objc2_foundation::{MainThreadMarker, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
 use std::cell::Cell;
 
 struct State {
@@ -58,13 +55,7 @@ fn label(view: &NSView, text: &str, y: f64, mtm: MainThreadMarker) -> Retained<N
     view.addSubview(&field);
     field
 }
-fn text_field(
-    view: &NSView,
-    title: &str,
-    value: &str,
-    y: f64,
-    mtm: MainThreadMarker,
-) -> Retained<NSTextField> {
+fn text_field(view: &NSView, title: &str, value: &str, y: f64, mtm: MainThreadMarker) -> Retained<NSTextField> {
     let field = NSTextField::initWithFrame(NSTextField::alloc(mtm), rect(20.0, y, 580.0, 28.0));
     field.setStringValue(&NSString::from_str(value));
     field.setAccessibilityTitle(Some(&NSString::from_str(title)));
@@ -81,21 +72,9 @@ fn menu(app: &NSApplication, mtm: MainThreadMarker) {
     main.addItem(&item);
     // Standard responder-chain editing actions for the standalone AppKit process.
     unsafe {
-        edit.addItemWithTitle_action_keyEquivalent(
-            &NSString::from_str("Copy"),
-            Some(sel!(copy:)),
-            &NSString::from_str("c"),
-        );
-        edit.addItemWithTitle_action_keyEquivalent(
-            &NSString::from_str("Paste"),
-            Some(sel!(paste:)),
-            &NSString::from_str("v"),
-        );
-        edit.addItemWithTitle_action_keyEquivalent(
-            &NSString::from_str("Select All"),
-            Some(sel!(selectAll:)),
-            &NSString::from_str("a"),
-        );
+        edit.addItemWithTitle_action_keyEquivalent(&NSString::from_str("Copy"), Some(sel!(copy:)), &NSString::from_str("c"));
+        edit.addItemWithTitle_action_keyEquivalent(&NSString::from_str("Paste"), Some(sel!(paste:)), &NSString::from_str("v"));
+        edit.addItemWithTitle_action_keyEquivalent(&NSString::from_str("Select All"), Some(sel!(selectAll:)), &NSString::from_str("a"));
     }
     app.setMainMenu(Some(&main));
 }
@@ -103,8 +82,7 @@ pub fn run() -> Result<()> {
     if std::env::var("BLINDLY4_LIVE").as_deref() != Ok("1") {
         return Err(Error::usage("The desktop fixture requires BLINDLY4_LIVE=1"));
     }
-    let mtm = MainThreadMarker::new()
-        .ok_or_else(|| Error::unexpected("Fixture must run on the main thread"))?;
+    let mtm = MainThreadMarker::new().ok_or_else(|| Error::unexpected("Fixture must run on the main thread"))?;
     let app = NSApplication::sharedApplication(mtm);
     app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
     menu(&app, mtm);
@@ -122,17 +100,12 @@ pub fn run() -> Result<()> {
         window.setReleasedWhenClosed(false);
     }
     window.setTitle(&NSString::from_str("Blindly4 macOS test fixture"));
-    let view = window
-        .contentView()
-        .ok_or_else(|| Error::unexpected("Fixture has no content view"))?;
+    let view = window.contentView().ok_or_else(|| Error::unexpected("Fixture has no content view"))?;
     label(&view, "Fixture ready", 680.0, mtm);
     text_field(&view, "First field", "first untouched", 640.0, mtm);
     let draft = text_field(&view, "Draft", "", 600.0, mtm);
     text_field(&view, "Third field", "third untouched", 560.0, mtm);
-    let password = NSSecureTextField::initWithFrame(
-        NSSecureTextField::alloc(mtm),
-        rect(20.0, 520.0, 580.0, 28.0),
-    );
+    let password = NSSecureTextField::initWithFrame(NSSecureTextField::alloc(mtm), rect(20.0, 520.0, 580.0, 28.0));
     password.setStringValue(&NSString::from_str("fixture secret"));
     password.setAccessibilityTitle(Some(&NSString::from_str("Password")));
     view.addSubview(&password);
@@ -144,34 +117,21 @@ pub fn run() -> Result<()> {
         dropdown_label: label(&view, "Choice: 1", 270.0, mtm),
         count: Cell::new(0),
     };
-    let controller: Retained<Controller> =
-        unsafe { msg_send![super(Controller::alloc(mtm).set_ivars(state)), init] };
+    let controller: Retained<Controller> = unsafe { msg_send![super(Controller::alloc(mtm).set_ivars(state)), init] };
     // Targets remain alive throughout the event loop; selectors match Controller.
     unsafe {
-        let submit = NSButton::buttonWithTitle_target_action(
-            &NSString::from_str("Submit test draft"),
-            Some(&controller),
-            Some(sel!(submit:)),
-            mtm,
-        );
+        let submit =
+            NSButton::buttonWithTitle_target_action(&NSString::from_str("Submit test draft"), Some(&controller), Some(sel!(submit:)), mtm);
         submit.setFrame(rect(20.0, 475.0, 240.0, 32.0));
         submit.setKeyEquivalent(&NSString::from_str("\r"));
         view.addSubview(&submit);
         draft.setTarget(Some(&controller));
         draft.setAction(Some(sel!(submit:)));
-        let checkbox = NSButton::checkboxWithTitle_target_action(
-            &NSString::from_str("Test checkbox"),
-            Some(&controller),
-            Some(sel!(toggle:)),
-            mtm,
-        );
+        let checkbox =
+            NSButton::checkboxWithTitle_target_action(&NSString::from_str("Test checkbox"), Some(&controller), Some(sel!(toggle:)), mtm);
         checkbox.setFrame(rect(20.0, 375.0, 260.0, 28.0));
         view.addSubview(&checkbox);
-        let popup = NSPopUpButton::initWithFrame_pullsDown(
-            NSPopUpButton::alloc(mtm),
-            rect(20.0, 300.0, 260.0, 28.0),
-            false,
-        );
+        let popup = NSPopUpButton::initWithFrame_pullsDown(NSPopUpButton::alloc(mtm), rect(20.0, 300.0, 260.0, 28.0), false);
         for title in ["Choice one", "Choice two", "Choice three"] {
             popup.addItemWithTitle(&NSString::from_str(title));
         }
@@ -180,18 +140,12 @@ pub fn run() -> Result<()> {
         popup.setAction(Some(sel!(selectChoice:)));
         view.addSubview(&popup);
     }
-    let scroll =
-        NSScrollView::initWithFrame(NSScrollView::alloc(mtm), rect(20.0, 30.0, 580.0, 220.0));
+    let scroll = NSScrollView::initWithFrame(NSScrollView::alloc(mtm), rect(20.0, 30.0, 580.0, 220.0));
     scroll.setHasVerticalScroller(true);
     scroll.setAccessibilityTitle(Some(&NSString::from_str("Scrollable options")));
     let document = NSView::initWithFrame(NSView::alloc(mtm), rect(0.0, 0.0, 540.0, 2400.0));
     for index in 0..80 {
-        label(
-            &document,
-            &format!("Option {:02}", index + 1),
-            2370.0 - index as f64 * 30.0,
-            mtm,
-        );
+        label(&document, &format!("Option {:02}", index + 1), 2370.0 - index as f64 * 30.0, mtm);
     }
     scroll.setDocumentView(Some(&document));
     view.addSubview(&scroll);

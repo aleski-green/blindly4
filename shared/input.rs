@@ -8,13 +8,7 @@ use serde_json::{Value, json};
 
 // Validate syntax before requesting Accessibility access or touching the UI.
 pub fn validate(command: &crate::registry::Command, i: &Invocation) -> Result<()> {
-    for (name, min, max) in [
-        ("pid", 1, i32::MAX),
-        ("depth", 0, 64),
-        ("max-nodes", 1, 10000),
-        ("limit", 1, 10000),
-        ("amount", 1, 100),
-    ] {
+    for (name, min, max) in [("pid", 1, i32::MAX), ("depth", 0, 64), ("max-nodes", 1, 10000), ("limit", 1, 10000), ("amount", 1, 100)] {
         if i.has(name) {
             i.integer(name, min, min, max)?;
         }
@@ -46,11 +40,7 @@ pub fn validate(command: &crate::registry::Command, i: &Invocation) -> Result<()
         "scroll" => {
             direction(i)?;
         }
-        "find"
-            if !["title", "role", "value", "description"]
-                .iter()
-                .any(|name| i.has(name)) =>
-        {
+        "find" if !["title", "role", "value", "description"].iter().any(|name| i.has(name)) => {
             return Err(Error::usage("find requires a search filter"));
         }
         "press" => i.pair("require-value-path", "require-value", false)?,
@@ -61,14 +51,9 @@ pub fn validate(command: &crate::registry::Command, i: &Invocation) -> Result<()
             crate::keyboard::parse(i.value("key")?)?;
             i.pair("target-path", "require-value", true)?;
             if i.has("target-path")
-                && (i.value("target-path")?.is_empty()
-                    || guards::normalize(i.value("require-value")?)
-                        .trim()
-                        .is_empty())
+                && (i.value("target-path")?.is_empty() || guards::normalize(i.value("require-value")?).trim().is_empty())
             {
-                return Err(Error::usage(
-                    "Guarded key requires a nonempty target path and draft",
-                ));
+                return Err(Error::usage("Guarded key requires a nonempty target path and draft"));
             }
         }
         _ => {}
@@ -110,20 +95,14 @@ pub fn type_text(i: &Invocation) -> Result<()> {
     let text = i.value("text")?;
     let pid = target(i)?;
     platform::text(pid, text)?;
-    response(
-        i,
-        pid,
-        json!({"characters": platform::characters(text), "ok": true}),
-    )
+    response(i, pid, json!({"characters": platform::characters(text), "ok": true}))
 }
 pub fn key(i: &Invocation) -> Result<()> {
     let key = i.value("key")?;
     let parsed = crate::keyboard::parse(key)?;
     let pid = target(i)?;
     if let Some(path) = i.optional("target-path") {
-        Node::application(pid)?
-            .resolve(path)?
-            .require_focused_draft(i.value("require-value")?)?;
+        Node::application(pid)?.resolve(path)?.require_focused_draft(i.value("require-value")?)?;
     }
     platform::key(pid, &parsed)?;
     let mut result = json!({"key": key, "ok": true});
@@ -136,9 +115,7 @@ pub fn key(i: &Invocation) -> Result<()> {
 pub fn selected_text(i: &Invocation) -> Result<()> {
     let path = i.value("path")?;
     let value = i.value("value")?;
-    Node::application(i.pid()?)?
-        .resolve(path)?
-        .selected_text(value)?;
+    Node::application(i.pid()?)?.resolve(path)?.selected_text(value)?;
     crate::json(&json!({"path": path, "attribute": "AXSelectedText", "ok": true}))
 }
 pub fn scroll(i: &Invocation) -> Result<()> {
@@ -146,11 +123,7 @@ pub fn scroll(i: &Invocation) -> Result<()> {
     let amount = i.integer("amount", 3, 1, 100)?;
     let pid = target(i)?;
     platform::scroll(pid, &direction, amount)?;
-    response(
-        i,
-        pid,
-        json!({"direction": direction, "amount": amount, "ok": true}),
-    )
+    response(i, pid, json!({"direction": direction, "amount": amount, "ok": true}))
 }
 pub fn paste(i: &Invocation) -> Result<()> {
     let text = i.value("text")?;
@@ -170,9 +143,7 @@ pub fn paste(i: &Invocation) -> Result<()> {
         let current = path.map(|p| root.resolve(p)).transpose()?;
         if let (Some(first), Some(current)) = (&initial, &current) {
             if !first.same(current) {
-                return Err(Error::access(
-                    "Paste target path changed; rediscover the control",
-                ));
+                return Err(Error::access("Paste target path changed; rediscover the control"));
             }
         }
         Ok(current)
@@ -195,17 +166,12 @@ pub fn paste(i: &Invocation) -> Result<()> {
             for _ in 0..100 {
                 platform::wait(0.01);
                 if let Some(node) = resolve()? {
-                    if node.exact_draft(text)?
-                        && node.has_focus()?
-                        && platform::foreground_pid() == pid
-                    {
+                    if node.exact_draft(text)? && node.has_focus()? && platform::foreground_pid() == pid {
                         return Ok(());
                     }
                 }
             }
-            return Err(Error::access(
-                "Paste failed exact draft verification; do not send or repeat input without inspecting the draft",
-            ));
+            return Err(Error::access("Paste failed exact draft verification; do not send or repeat input without inspecting the draft"));
         }
         platform::wait(0.3);
         Ok(())

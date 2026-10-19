@@ -10,25 +10,19 @@ impl Node {
     pub fn resolve(&self, path: &str) -> Result<Self> {
         let mut node = self.clone();
         for index in guards::path(path)? {
-            node = node.children()?.into_iter().nth(index).ok_or_else(|| {
-                Error::access(format!(
-                    "Path {path} no longer exists; rediscover the target"
-                ))
-            })?;
+            node = node
+                .children()?
+                .into_iter()
+                .nth(index)
+                .ok_or_else(|| Error::access(format!("Path {path} no longer exists; rediscover the target")))?;
         }
         Ok(node)
     }
     pub fn require_focused_draft(&self, expected: &str) -> Result<()> {
-        if self.writable()?
-            && self.has_focus()?
-            && self.exact_draft(expected)?
-            && platform::foreground_pid() == self.pid()
-        {
+        if self.writable()? && self.has_focus()? && self.exact_draft(expected)? && platform::foreground_pid() == self.pid() {
             return Ok(());
         }
-        Err(Error::access(
-            "Input blocked: writable target, keyboard focus, exact draft and foreground PID must all match. Do not send.",
-        ))
+        Err(Error::access("Input blocked: writable target, keyboard focus, exact draft and foreground PID must all match. Do not send."))
     }
     pub fn focus(&self) -> Result<()> {
         self.check_control()?;
@@ -56,17 +50,10 @@ pub const ATTRIBUTES: &[&str] = &[
 ];
 impl Node {
     pub fn check_control(&self) -> Result<()> {
-        if self.is_root() {
-            Err(Error::usage("Choose a control path"))
-        } else {
-            Ok(())
-        }
+        if self.is_root() { Err(Error::usage("Choose a control path")) } else { Ok(()) }
     }
     pub fn text(&self, name: &str) -> Result<String> {
-        Ok(self
-            .property(name)?
-            .and_then(|v| v.as_str().map(str::to_owned))
-            .unwrap_or_default())
+        Ok(self.property(name)?.and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default())
     }
     pub fn role(&self) -> Result<String> {
         self.text("AXRole")
@@ -75,21 +62,12 @@ impl Node {
         Ok(self.property("AXSelected")? == Some(serde_json::json!(true)))
     }
     pub fn value(&self) -> Result<Option<String>> {
-        if self.secure()? {
-            Ok(None)
-        } else {
-            Ok(self
-                .property("AXValue")?
-                .and_then(|v| v.as_str().map(str::to_owned)))
-        }
+        if self.secure()? { Ok(None) } else { Ok(self.property("AXValue")?.and_then(|v| v.as_str().map(str::to_owned))) }
     }
     pub fn writable(&self) -> Result<bool> {
         Ok(!self.is_root()
             && !self.secure()?
-            && matches!(
-                self.role()?.as_str(),
-                "AXTextField" | "AXTextArea" | "AXComboBox"
-            )
+            && matches!(self.role()?.as_str(), "AXTextField" | "AXTextArea" | "AXComboBox")
             && self.property("AXEnabled")? != Some(serde_json::json!(false))
             && self.value_settable()?)
     }
@@ -110,9 +88,7 @@ impl Node {
             self.focus()?;
         }
         if !self.writable()? || !self.has_focus()? {
-            return Err(Error::access(
-                "Selected text target must be writable and focused",
-            ));
+            return Err(Error::access("Selected text target must be writable and focused"));
         }
         crate::application::require_foreground(self.pid())?;
         self.selected_text_native(text)
@@ -139,12 +115,7 @@ impl Node {
                 continue;
             }
             for key in ["AXValue", "AXTitle", "AXDescription"] {
-                if node
-                    .property(key)?
-                    .as_ref()
-                    .and_then(serde_json::Value::as_str)
-                    .is_some_and(|value| guards::exact(value, expected))
-                {
+                if node.property(key)?.as_ref().and_then(serde_json::Value::as_str).is_some_and(|value| guards::exact(value, expected)) {
                     return Ok(true);
                 }
             }
@@ -157,9 +128,7 @@ impl Node {
     pub fn detail(&self, path: Option<&str>) -> Result<serde_json::Value> {
         use serde_json::{Value, json};
         let values = self.properties()?;
-        let secure = ["AXRole", "AXSubrole"]
-            .iter()
-            .any(|key| values.get(*key).and_then(Value::as_str) == Some("AXSecureTextField"));
+        let secure = ["AXRole", "AXSubrole"].iter().any(|key| values.get(*key).and_then(Value::as_str) == Some("AXSecureTextField"));
         let mut row = json!({"pid": self.pid()});
         for (name, value) in values {
             // Preserve Windows' explicit null and macOS' omitted secure value.

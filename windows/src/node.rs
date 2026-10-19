@@ -18,11 +18,7 @@ impl Node {
         self.pid
     }
     pub fn root(pid: i32) -> Result<Self> {
-        Ok(Self {
-            element: None,
-            pid,
-            automation: unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)? },
-        })
+        Ok(Self { element: None, pid, automation: unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)? } })
     }
     pub fn application(pid: i32) -> Result<Self> {
         if pid <= 0 || !native::windows()?.iter().any(|window| window.pid == pid) {
@@ -41,16 +37,10 @@ impl Node {
                 self.pid
             )));
         }
-        Ok(Self {
-            element: Some(element),
-            pid: self.pid,
-            automation: self.automation.clone(),
-        })
+        Ok(Self { element: Some(element), pid: self.pid, automation: self.automation.clone() })
     }
     fn element(&self) -> Result<&IUIAutomationElement> {
-        self.element
-            .as_ref()
-            .ok_or_else(|| Error::usage("Choose a control path"))
+        self.element.as_ref().ok_or_else(|| Error::usage("Choose a control path"))
     }
     fn pattern<T: Pattern>(&self) -> Result<Option<T>> {
         let Some(e) = &self.element else {
@@ -101,25 +91,16 @@ impl Node {
         };
         Ok(Some(unsafe {
             match name {
-                "AXRole" => json!(if e.CurrentControlType()? == UIA_EditControlTypeId
-                    && self.secure()?
-                {
+                "AXRole" => json!(if e.CurrentControlType()? == UIA_EditControlTypeId && self.secure()? {
                     "AXSecureTextField"
                 } else {
                     control_type_names(e.CurrentControlType()?).1
                 }),
-                "AXSubrole" => json!(format!(
-                    "ControlType.{}",
-                    control_type_names(e.CurrentControlType()?).0
-                )),
+                "AXSubrole" => json!(format!("ControlType.{}", control_type_names(e.CurrentControlType()?).0)),
                 "AXTitle" => json!(e.CurrentName()?.to_string()),
                 "AXDescription" => {
                     let help = e.CurrentHelpText()?.to_string();
-                    json!(if help.is_empty() {
-                        e.CurrentName()?.to_string()
-                    } else {
-                        help
-                    })
+                    json!(if help.is_empty() { e.CurrentName()?.to_string() } else { help })
                 }
                 "AXIdentifier" => json!(e.CurrentAutomationId()?.to_string()),
                 "AXEnabled" => json!(e.CurrentIsEnabled()?.as_bool()),
@@ -176,29 +157,17 @@ impl Node {
                 let mut child = nullable_uia_element(walker.GetFirstChildElement(e))?;
                 while let Some(current) = child {
                     if children.len() == 10000 {
-                        return Err(Error::access(
-                            "Control has more than 10000 children; narrow the target",
-                        ));
+                        return Err(Error::access("Control has more than 10000 children; narrow the target"));
                     }
                     let parent = nullable_uia_element(walker.GetParentElement(&current))?
-                        .ok_or_else(|| {
-                            Error::access(
-                                "Accessibility child lost its parent; rediscover the target",
-                            )
-                        })?;
-                    let has_expected_parent =
-                        self.automation.CompareElements(e, &parent)?.as_bool();
+                        .ok_or_else(|| Error::access("Accessibility child lost its parent; rediscover the target"))?;
+                    let has_expected_parent = self.automation.CompareElements(e, &parent)?.as_bool();
                     let desktop_parented_combo_popup = children.is_empty()
                         && e.CurrentControlType()? == UIA_ComboBoxControlTypeId
                         && current.CurrentControlType()? == UIA_ListControlTypeId
-                        && self
-                            .automation
-                            .CompareElements(&parent, &self.automation.GetRootElement()?)?
-                            .as_bool();
+                        && self.automation.CompareElements(&parent, &self.automation.GetRootElement()?)?.as_bool();
                     if !has_expected_parent && !desktop_parented_combo_popup {
-                        return Err(Error::access(
-                            "Accessibility child changed parents; rediscover the target",
-                        ));
+                        return Err(Error::access("Accessibility child changed parents; rediscover the target"));
                     }
                     children.push(self.with_same_process_element(current.clone())?);
                     if desktop_parented_combo_popup {
@@ -208,9 +177,7 @@ impl Node {
                 }
             } else {
                 for window in native::windows()?.into_iter().filter(|w| w.pid == self.pid) {
-                    children.push(self.with_same_process_element(
-                        self.automation.ElementFromHandle(window.handle)?,
-                    )?);
+                    children.push(self.with_same_process_element(self.automation.ElementFromHandle(window.handle)?)?);
                 }
             }
         }
@@ -221,9 +188,7 @@ impl Node {
             return false;
         }
         match (&self.element, &other.element) {
-            (Some(a), Some(b)) => {
-                unsafe { self.automation.CompareElements(a, b) }.is_ok_and(|v| v.as_bool())
-            }
+            (Some(a), Some(b)) => unsafe { self.automation.CompareElements(a, b) }.is_ok_and(|v| v.as_bool()),
             (None, None) => true,
             _ => false,
         }
@@ -247,16 +212,10 @@ impl Node {
         Ok(())
     }
     pub fn perform(&self, name: &str) -> Result<()> {
-        if self.action(name, true)? {
-            Ok(())
-        } else {
-            Err(Error::usage(format!("Target does not support {name}")))
-        }
+        if self.action(name, true)? { Ok(()) } else { Err(Error::usage(format!("Target does not support {name}"))) }
     }
 }
-fn nullable_uia_element(
-    result: windows::core::Result<IUIAutomationElement>,
-) -> Result<Option<IUIAutomationElement>> {
+fn nullable_uia_element(result: windows::core::Result<IUIAutomationElement>) -> Result<Option<IUIAutomationElement>> {
     match result {
         Ok(e) => Ok(Some(e)),
         Err(e) if e.code() == windows::Win32::Foundation::S_OK => Ok(None),
@@ -307,10 +266,7 @@ fn control_type_names(id: UIA_CONTROLTYPE_ID) -> (&'static str, &'static str) {
         ("SemanticZoom", "AXGroup"),
         ("AppBar", "AXGroup"),
     ];
-    id.0.checked_sub(50000)
-        .and_then(|n| NAMES.get(n as usize))
-        .copied()
-        .unwrap_or(("Custom", "AXGroup"))
+    id.0.checked_sub(50000).and_then(|n| NAMES.get(n as usize)).copied().unwrap_or(("Custom", "AXGroup"))
 }
 
 trait Pattern: Interface {

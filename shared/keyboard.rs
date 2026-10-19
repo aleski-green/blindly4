@@ -25,7 +25,6 @@ pub fn parse(text: &str) -> Result<platform::Key> {
         };
         modifiers.push(index);
     }
-    let code = platform::key_code(canonical)
-        .ok_or_else(|| Error::usage(format!("Unsupported key: {key}")))?;
+    let code = platform::key_code(canonical).ok_or_else(|| Error::usage(format!("Unsupported key: {key}")))?;
     Ok(platform::Key::new(code, &modifiers))
 }

@@ -37,9 +37,7 @@ struct OwnedClipboardFormat {
 impl OwnedClipboardFormat {
     fn copy(id: u32, handle: HANDLE) -> Result<Self> {
         if (0x200..=0x2ff).contains(&id) || id == 0x80 {
-            return Err(Error::access(
-                "Clipboard contains an owner-managed format that cannot be safely preserved",
-            ));
+            return Err(Error::access("Clipboard contains an owner-managed format that cannot be safely preserved"));
         }
         let handle = unsafe {
             match id {
@@ -56,19 +54,14 @@ impl OwnedClipboardFormat {
             }
         };
         if handle.is_invalid() {
-            return Err(Error::access(format!(
-                "Cannot preserve clipboard format {id}; input was not attempted"
-            )));
+            return Err(Error::access(format!("Cannot preserve clipboard format {id}; input was not attempted")));
         }
         Ok(Self { id, handle })
     }
     fn text(text: &str) -> Result<Self> {
         let units = native::wide(text);
         let handle = unsafe { GlobalAlloc(GMEM_MOVEABLE, units.len() * size_of::<u16>())? };
-        let format = Self {
-            id: 13,
-            handle: HANDLE(handle.0),
-        };
+        let format = Self { id: 13, handle: HANDLE(handle.0) };
         unsafe {
             let ptr = GlobalLock(handle) as *mut u16;
             if ptr.is_null() {
@@ -141,12 +134,7 @@ impl Clipboard {
                 None,
             )?
         };
-        let mut clipboard = Self {
-            owner,
-            formats: vec![],
-            captured_sequence: 0,
-            replacement_sequence: None,
-        };
+        let mut clipboard = Self { owner, formats: vec![], captured_sequence: 0, replacement_sequence: None };
         let _lock = ClipboardLock::open(owner)?;
         let mut id = 0;
         loop {
@@ -161,9 +149,7 @@ impl Clipboard {
                 break;
             }
             let handle = unsafe { GetClipboardData(id)? };
-            clipboard
-                .formats
-                .push(OwnedClipboardFormat::copy(id, handle)?);
+            clipboard.formats.push(OwnedClipboardFormat::copy(id, handle)?);
         }
         clipboard.captured_sequence = unsafe { GetClipboardSequenceNumber() };
         Ok(clipboard)
@@ -172,9 +158,7 @@ impl Clipboard {
         let mut replacement = OwnedClipboardFormat::text(text)?;
         let _lock = ClipboardLock::open(self.owner)?;
         if unsafe { GetClipboardSequenceNumber() } != self.captured_sequence {
-            return Err(Error::access(
-                "Clipboard changed before paste; input blocked",
-            ));
+            return Err(Error::access("Clipboard changed before paste; input blocked"));
         }
         unsafe {
             EmptyClipboard()?;

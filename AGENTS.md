@@ -20,6 +20,8 @@ bundle exec rspec
 
 Tests require Ruby 3.4 and Bundler. Static checks are `cargo fmt --check` and
 `cargo clippy --all-targets -- -D warnings` from each platform directory.
+Use the root `rustfmt.toml` for compact formatting: keep calls, literals, chains,
+and short expressions inline when they fit within 140 columns.
 Desktop input changes also require `BLINDLY4_LIVE=1 bundle exec rspec` on an
 unlocked interactive desktop (set the environment variable using PowerShell on
 Windows). This runs the harmless fixture through real CLI subprocesses.
