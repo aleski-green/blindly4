@@ -1,6 +1,10 @@
 require 'spec_helper'
 
 RSpec.describe 'The public CLI' do
+  it 'rejects duplicate options instead of silently overriding them' do
+    usage_error('tree', '--depth', '2', '--depth', '3')
+  end
+
   it 'describes all 22 commands through schema version 2' do
     schema = success('schema')
     expect(schema.fetch('schemaVersion')).to eq(2)
@@ -70,6 +74,50 @@ RSpec.describe 'The public CLI' do
     %w[type --text help --not-a-real-option value],
     %w[set-value --path 0 --value -h --not-a-real-option value] ].each do |arguments|
     it "rejects invalid arguments #{arguments.inspect}" do
+      usage_error(*arguments)
+    end
+  end
+
+  %w[-1 65 2147483648 x].each do |depth|
+    it "rejects invalid tree depth #{depth}" do
+      usage_error('tree', '--depth', depth)
+    end
+  end
+
+  %w[NaN inf -inf 1e999 100001].each do |coordinate|
+    it "rejects invalid click coordinate #{coordinate} before emitting input" do
+      usage_error('click', '--x', coordinate, '--y', '0')
+    end
+  end
+
+  ['file:///C:/test', 'javascript:alert(1)', 'shell:AppsFolder', 'relative', 'https://', 'slack:'].each do |url|
+    it "refuses to open unsupported URL #{url.inspect}" do
+      usage_error('open', '--url', url)
+    end
+  end
+
+  ['ctrl+bogus', 'command+bogus', 'unknown+a', '', 'ctrl+', 'command+', 'f0', 'f25'].each do |key|
+    it "rejects invalid key #{key.inspect} before emitting input" do
+      usage_error('key', '--key', key)
+    end
+  end
+
+  [ %w[key --key return --target-path 0 --require-value draft],
+    %w[key --key return --pid 1 --target-path 0],
+    %w[key --key return --pid 1 --require-value draft],
+    %w[press --path 0 --require-value draft],
+    %w[press --path 0 --require-value-path 0],
+    %w[paste --target-path 0 --text draft],
+    %w[scroll --direction diagonal], %w[scroll --direction down --amount 0],
+    %w[tree --pid 0], %w[tree --max-nodes 0], %w[find --limit 0 --title Draft] ].each do |arguments|
+    it "refuses incomplete or unsafe input #{arguments.inspect}" do
+      usage_error(*arguments)
+    end
+  end
+
+  [['key', '--key', 'return', '--pid', '1', '--target-path', '', '--require-value', 'draft'],
+   ['key', '--key', 'return', '--pid', '1', '--target-path', '0', '--require-value', '  ']].each do |arguments|
+    it "rejects an empty guarded target or draft before input: #{arguments.inspect}" do
       usage_error(*arguments)
     end
   end

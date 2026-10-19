@@ -61,13 +61,6 @@ RSpec.describe 'A native macOS form', :macos, :live do
     expect_not_submitted
   end
 
-  it 'supports an empty verified paste without inserting or submitting text' do
-    set_draft('old draft')
-    expect(app('paste', '--target-path', draft, '--text', '')).to include('verified' => true)
-    expect(draft_value).to eq('')
-    expect_not_submitted
-  end
-
   it 'toggles a native checkbox and reads the observed state' do
     checkbox = find_control_path('Test checkbox', 'AXCheckBox')
     app('press', '--path', checkbox)

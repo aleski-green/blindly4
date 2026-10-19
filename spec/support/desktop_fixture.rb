@@ -7,12 +7,16 @@ module DesktopFixture
     @fixture_pid = Process.spawn([Blindly::BINARY, Blindly::BINARY], '--test-app',
                                  in: File::NULL, out: File::NULL, err: File::NULL)
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
+    previous_ready = nil
     loop do
       frontmost = success('apps').fetch('apps').any? { |app| app.fetch('pid') == @fixture_pid && (!Blindly::WINDOWS || app.fetch('frontmost')) }
       if frontmost
         frontmost = cli('activate', '--pid', @fixture_pid).status == 0 if Blindly::MACOS
         ready = cli('find', '--pid', @fixture_pid, '--title', 'Fixture ready', '--role', 'AXStaticText', '--limit', '1')
-        break if frontmost && ready.status == 0 && ready.json.fetch('matches').any? { |row| row.fetch('title') == 'Fixture ready' }
+        observed = ready.status == 0 ? ready.json : nil
+        settled = frontmost && observed && observed.fetch('matches').any? { |row| row.fetch('title') == 'Fixture ready' }
+        break if settled && observed == previous_ready
+        previous_ready = settled ? observed : nil
       end
       raise 'The fixture exited before opening' if Process.waitpid(@fixture_pid, Process::WNOHANG)
       raise 'The fixture was not ready in the foreground within 10 seconds' if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline

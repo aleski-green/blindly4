@@ -3,8 +3,7 @@ use crate::{
     error::{Error, Result},
     guards, input,
     invocation::Invocation,
-    native,
-    node::Node,
+    platform::{self, Node},
 };
 use serde_json::{Value, json};
 
@@ -53,18 +52,22 @@ pub static ALL: &[Command] = &[
     command!(
         "schema",
         "",
-        native::SCHEMA_SUMMARY,
+        platform::SCHEMA_SUMMARY,
         "read-only",
         false,
-        |_| { crate::json(&native::schema(ALL.iter().map(Command::metadata).collect())) }
+        |_| {
+            crate::json(&platform::schema(
+                ALL.iter().map(Command::metadata).collect(),
+            ))
+        }
     ),
     command!(
         "request-permission",
         "",
-        native::PERMISSION_SUMMARY,
+        platform::PERMISSION_SUMMARY,
         "ui-mutation",
         false,
-        |_| crate::json(&native::request_permission())
+        |_| crate::json(&platform::request_permission())
     ),
     command!(
         "apps",
@@ -72,7 +75,7 @@ pub static ALL: &[Command] = &[
         "List visible GUI applications and PIDs.",
         "read-only",
         false,
-        |_| crate::json(&json!({"apps": native::apps()?}))
+        |_| crate::json(&json!({"apps": platform::apps()?}))
     ),
     command!(
         "activate",
@@ -83,8 +86,8 @@ pub static ALL: &[Command] = &[
         |i| {
             i.value("pid")?;
             let pid = i.pid()?;
-            native::activate(pid)?;
-            crate::json(&json!({"pid": native::activation_pid(pid), "ok": true}))
+            crate::application::activate(pid)?;
+            crate::json(&json!({"pid": platform::activation_pid(pid), "ok": true}))
         }
     ),
     command!(
@@ -96,7 +99,7 @@ pub static ALL: &[Command] = &[
         |i| {
             let url = i.value("url")?;
             guards::url(url)?;
-            native::open_url(url)?;
+            platform::open_url(url)?;
             crate::json(&json!({"url": url, "ok": true}))
         }
     ),
@@ -189,7 +192,7 @@ pub static ALL: &[Command] = &[
     command!(
         "set-value",
         "--path INDEX[.INDEX...] [--pid PID] --value TEXT",
-        native::VALUE_SUMMARY,
+        platform::VALUE_SUMMARY,
         "ui-mutation",
         true,
         |i| {

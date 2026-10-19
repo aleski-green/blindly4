@@ -7,6 +7,10 @@ publish = false
 license-file = "../license/LICENSE.md"
 description = "Stateless native macOS Accessibility CLI"
 
+[[bin]]
+name = "blindly4"
+path = "../shared/main.rs"
+
 [dependencies]
 serde_json = "1"
 unicode-normalization = "0.1"

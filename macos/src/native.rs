@@ -1,7 +1,6 @@
-use crate::{
-    ax,
-    error::{Error, Result},
-};
+use super::ax;
+use crate::application::require_foreground;
+use crate::error::{Error, Result};
 use core_graphics::{
     event::{
         CGEvent, CGEventFlags, CGEventTapLocation, CGEventType, CGMouseButton, ScrollEventUnit,
@@ -59,32 +58,14 @@ pub fn apps() -> Result<Vec<Value>> {
         .filter(|app| app.activationPolicy() == NSApplicationActivationPolicy::Regular)
         .map(|app| json!({"name": app.localizedName().map(|s| s.to_string()).unwrap_or_default(), "pid": app.processIdentifier(), "bundleId": app.bundleIdentifier().map(|s| s.to_string()).unwrap_or_default()})).collect())
 }
-pub fn activate(pid: i32) -> Result<()> {
+pub fn activate_native(pid: i32) -> Result<()> {
     let app = require_app(pid)?;
-    if foreground_pid() == pid {
-        return Ok(());
-    }
     app.unhide();
     #[allow(deprecated)]
     if !app.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps) {
         return Err(Error::access(format!("Could not activate PID {pid}")));
     }
-    for _ in 0..20 {
-        wait(0.05);
-        if foreground_pid() == pid {
-            return Ok(());
-        }
-    }
-    require_foreground(pid)
-}
-pub fn require_foreground(pid: i32) -> Result<()> {
-    if pid > 0 && foreground_pid() == pid {
-        Ok(())
-    } else {
-        Err(Error::access(
-            "Target application is not frontmost; refusing cross-app input",
-        ))
-    }
+    Ok(())
 }
 pub fn open_url(value: &str) -> Result<()> {
     let url = NSURL::URLWithString(&NSString::from_str(value))
@@ -121,7 +102,9 @@ pub fn click(pid: i32, x: f64, y: f64) -> Result<()> {
     wait(0.05);
     Ok(())
 }
-pub fn parse_key(text: &str) -> Result<(u16, CGEventFlags)> {
+pub struct Key(u16, CGEventFlags);
+
+pub fn parse_key(text: &str) -> Result<Key> {
     let lower = text.to_lowercase();
     let parts: Vec<_> = lower.split('+').collect();
     let mut flags = CGEventFlags::empty();
@@ -199,9 +182,9 @@ pub fn parse_key(text: &str) -> Result<(u16, CGEventFlags)> {
         "f12" => 111,
         key => return Err(Error::usage(format!("Unsupported key: {key}"))),
     };
-    Ok((code, flags))
+    Ok(Key(code, flags))
 }
-pub fn key(pid: i32, key: (u16, CGEventFlags)) -> Result<()> {
+pub fn key(pid: i32, key: &Key) -> Result<()> {
     let source = source()?;
     let down = CGEvent::new_keyboard_event(source.clone(), key.0, true)
         .map_err(|_| Error::access("Could not create key event"))?;
@@ -234,7 +217,7 @@ pub fn text(pid: i32, text: &str) -> Result<()> {
             require_foreground(pid)?;
             down.post(CGEventTapLocation::HID);
             up.post(CGEventTapLocation::HID);
-            wait(0.01);
+            wait(0.05);
             chunk.clear();
             units = 0;
         }

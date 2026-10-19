@@ -41,9 +41,10 @@ If automation is needed, do it every `{T}` minutes/hours.
 
 ## Architecture
 
-- `shared/`: registry, argument parsing, errors, safety helpers, and traversal
-- `macos/src/`: AX reads, AppKit application control, Quartz input, clipboard, fixture
-- `windows/src/`: UI Automation, Win32 input, clipboard, fixture
+- `shared/`: one entry point, command engine, validation, activation, input workflows, and traversal
+- `adapters/mod.rs`: compile-time platform selection; shared code must contain no OS branches
+- `macos/src/`: macOS adapter, AX/AppKit/Quartz operations, clipboard, and fixture
+- `windows/src/`: Windows adapter, UI Automation/Win32 operations, clipboard, and fixture
 - `spec/`: shared CLI and platform desktop behavior, all in RSpec
 
 Commands are declared once in `shared/registry.rs`. Keep their summary, risk,

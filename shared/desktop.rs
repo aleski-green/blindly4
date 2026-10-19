@@ -1,11 +1,9 @@
 use crate::{
     error::{Error, Result},
     invocation::Invocation,
-    native,
-    node::Node,
+    platform::{self, Node},
 };
 use serde_json::{Value, json};
-use std::{thread::sleep, time::Duration};
 
 pub fn tree(i: &Invocation) -> Result<()> {
     let mut remaining = i.integer("max-nodes", 250, 1, 10000)?;
@@ -93,13 +91,8 @@ pub fn find(i: &Invocation) -> Result<()> {
         let row = node.detail(Some(path))?;
         if filters.iter().all(|(k, v)| {
             let actual = row[*k].as_str().unwrap_or("");
-            if cfg!(target_os = "macos") && *k == "role" {
-                let expected = if v.starts_with("ax") {
-                    v.clone()
-                } else {
-                    format!("ax{v}")
-                };
-                actual.to_lowercase() == expected
+            if *k == "role" {
+                platform::role_matches(actual, v)
             } else {
                 actual.to_lowercase().contains(v)
             }
@@ -117,7 +110,7 @@ pub fn focused(i: &Invocation) -> Result<()> {
         exit: 77,
         code: "focus_unavailable",
     };
-    if i.has("pid") && native::foreground_pid() != pid {
+    if i.has("pid") && platform::foreground_pid() != pid {
         return Err(unavailable());
     }
     let node = Node::root(pid)?.focused().map_err(|_| unavailable())?;
@@ -130,11 +123,7 @@ pub fn mutate(
 ) -> Result<()> {
     let path = i.value("path")?;
     mutate(&Node::application(i.pid()?)?.resolve(path)?)?;
-    let key = if cfg!(target_os = "macos") && matches!(action, "AXFocused" | "AXValue") {
-        "attribute"
-    } else {
-        "action"
-    };
+    let key = platform::mutation_key(action);
     crate::json(&json!({"path": path, key: action, "ok": true}))
 }
 pub fn press(i: &Invocation) -> Result<()> {
@@ -164,7 +153,6 @@ pub fn press(i: &Invocation) -> Result<()> {
             ));
         }
     }
-    #[cfg(target_os = "macos")]
     if !target.same(&root.resolve(path)?) {
         return Err(Error::access("Press target path changed; rediscover it"));
     }
@@ -174,7 +162,7 @@ pub fn press(i: &Invocation) -> Result<()> {
             if target.selected()? {
                 break;
             }
-            sleep(Duration::from_millis(50));
+            platform::wait(0.05);
         }
         if !target.selected()? {
             return Err(Error::access(

@@ -1,3 +1,4 @@
+use crate::application::require_foreground;
 use crate::error::{Error, Result};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, thread::sleep, time::Duration};
@@ -96,18 +97,7 @@ pub fn apps() -> Result<Vec<Value>> {
     }
     Ok(groups.into_iter().map(|(pid, titles)| json!({"pid": pid, "name": process_name(pid), "bundleIdentifier": null, "frontmost": pid == foreground_pid(), "windows": titles})).collect())
 }
-pub fn require_foreground(pid: i32) -> Result<()> {
-    if pid <= 0 || foreground_pid() != pid {
-        return Err(Error::access(
-            "Input blocked: the intended PID is not the foreground application",
-        ));
-    }
-    Ok(())
-}
-pub fn activate(pid: i32) -> Result<()> {
-    if pid > 0 && foreground_pid() == pid {
-        return Ok(());
-    }
+pub fn activate_native(pid: i32) -> Result<()> {
     let window = windows()?
         .into_iter()
         .find(|w| w.pid == pid)
@@ -118,13 +108,7 @@ pub fn activate(pid: i32) -> Result<()> {
         }
         let _ = SetForegroundWindow(window.handle);
     }
-    for _ in 0..20 {
-        if foreground_pid() == pid {
-            break;
-        }
-        sleep(Duration::from_millis(25));
-    }
-    require_foreground(pid)
+    Ok(())
 }
 pub fn require_point(pid: i32, x: i32, y: i32) -> Result<()> {
     let handle = unsafe { GetAncestor(WindowFromPoint(POINT { x, y }), GA_ROOT) };
@@ -168,7 +152,8 @@ pub fn text(pid: i32, text: &str) -> Result<()> {
     }
     Ok(())
 }
-pub fn key(pid: i32, keys: &[u16]) -> Result<()> {
+pub fn key(pid: i32, key: &Key) -> Result<()> {
+    let keys = &key.0;
     let events: Vec<_> = keys
         .iter()
         .map(|k| key_event(*k, false, false))
@@ -188,7 +173,8 @@ fn mouse(flags: MOUSE_EVENT_FLAGS, data: u32) -> INPUT {
         },
     }
 }
-pub fn click(pid: i32, x: i32, y: i32) -> Result<()> {
+pub fn click(pid: i32, x: f64, y: f64) -> Result<()> {
+    let (x, y) = (x.round_ties_even() as i32, y.round_ties_even() as i32);
     require_foreground(pid)?;
     require_point(pid, x, y)?;
     unsafe {
@@ -258,3 +244,53 @@ pub const SCHEMA_SUMMARY: &str =
     "Print command metadata. Windows UIA retains AX role/action names for compatibility.";
 pub const PERMISSION_SUMMARY: &str = "Windows UI Automation needs no macOS permission. Elevated and secure desktops remain inaccessible.";
 pub const VALUE_SUMMARY: &str = "Set a writable ValuePattern.";
+
+pub struct Key(Vec<u16>);
+
+pub fn parse_key(text: &str) -> Result<Key> {
+    let lower = text.to_lowercase();
+    let parts: Vec<_> = lower.split('+').collect();
+    let mut keys = Vec::new();
+    for modifier in &parts[..parts.len() - 1] {
+        keys.push(match *modifier {
+            "ctrl" | "control" | "command" | "cmd" => 0x11,
+            "shift" => 0x10,
+            "alt" | "option" => 0x12,
+            _ => return Err(Error::usage(format!("Unsupported modifier: {modifier}"))),
+        });
+    }
+    let key = parts[parts.len() - 1];
+    let value = match key {
+        "return" | "enter" => 0x0d,
+        "tab" => 9,
+        "escape" | "esc" => 0x1b,
+        "space" => 0x20,
+        "delete" | "backspace" => 8,
+        "forward-delete" => 0x2e,
+        "up" => 0x26,
+        "down" => 0x28,
+        "left" => 0x25,
+        "right" => 0x27,
+        "home" => 0x24,
+        "end" => 0x23,
+        "pageup" => 0x21,
+        "pagedown" => 0x22,
+        _ if key.len() == 1 && key.as_bytes()[0].is_ascii_alphanumeric() => {
+            key.as_bytes()[0].to_ascii_uppercase() as u16
+        }
+        _ => match key
+            .strip_prefix('f')
+            .and_then(|s| s.parse::<u16>().ok())
+            .filter(|f| (1..=24).contains(f))
+        {
+            Some(f) => 0x70 + f - 1,
+            None => return Err(Error::usage(format!("Unsupported key: {key}"))),
+        },
+    };
+    keys.push(value);
+    Ok(Key(keys))
+}
+
+pub fn wait(seconds: f64) {
+    sleep(Duration::from_secs_f64(seconds));
+}

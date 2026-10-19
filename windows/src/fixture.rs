@@ -1,7 +1,5 @@
-use crate::{
-    error::{Error, Result},
-    native,
-};
+use super::native;
+use crate::error::{Error, Result};
 use windows::{
     Win32::{
         Foundation::*,

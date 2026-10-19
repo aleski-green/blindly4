@@ -1,6 +1,6 @@
 use crate::{
     error::{Error, Result},
-    native,
+    platform,
     registry::Command,
 };
 use std::collections::BTreeMap;
@@ -64,7 +64,7 @@ impl Invocation {
             .ok_or_else(|| Error::usage(format!("--{name} must be finite and numeric")))
     }
     pub fn pid(&self) -> Result<i32> {
-        self.integer("pid", native::foreground_pid(), 1, i32::MAX)
+        self.integer("pid", platform::foreground_pid(), 1, i32::MAX)
     }
     pub fn pair(&self, a: &str, b: &str, require_pid: bool) -> Result<()> {
         if self.has(a) != self.has(b) || (self.has(a) && require_pid && !self.has("pid")) {

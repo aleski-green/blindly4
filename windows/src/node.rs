@@ -1,7 +1,8 @@
 #![allow(non_upper_case_globals)]
+use super::native;
 use crate::{
     error::{Error, Result},
-    guards, native,
+    guards,
 };
 use serde_json::{Value, json};
 use windows::{
@@ -16,6 +17,9 @@ pub struct Node {
     automation: IUIAutomation,
 }
 impl Node {
+    pub fn pid(&self) -> i32 {
+        self.pid
+    }
     pub fn root(pid: i32) -> Result<Self> {
         Ok(Self {
             element: None,
@@ -28,17 +32,6 @@ impl Node {
             return Err(Error::access(format!("No visible windows for PID {pid}")));
         }
         Self::root(pid)
-    }
-    pub fn resolve(&self, path: &str) -> Result<Self> {
-        let mut node = self.clone();
-        for index in guards::path(path)? {
-            node = node.children()?.into_iter().nth(index).ok_or_else(|| {
-                Error::access(format!(
-                    "Path {path} no longer exists; rediscover the target"
-                ))
-            })?;
-        }
-        Ok(node)
     }
     pub fn focused(&self) -> Result<Self> {
         self.with_same_process_element(unsafe { self.automation.GetFocusedElement()? })
@@ -149,18 +142,6 @@ impl Node {
     }
     pub fn exact_draft(&self, expected: &str) -> Result<bool> {
         Ok(self.value()?.is_some_and(|v| guards::exact(&v, expected)))
-    }
-    pub fn require_focused_draft(&self, expected: &str) -> Result<()> {
-        let writable = self.writable()?;
-        let focused = self.has_focus()?;
-        let matches = self.exact_draft(expected)?;
-        let frontmost = native::foreground_pid() == self.pid;
-        if !(writable && focused && matches && frontmost) {
-            return Err(Error::access(
-                "Input blocked: writable target, keyboard focus, exact draft and foreground PID must all match. Do not send.",
-            ));
-        }
-        Ok(())
     }
     pub fn selected(&self) -> Result<bool> {
         match self
@@ -287,16 +268,37 @@ impl Node {
         }
         Ok(children)
     }
-    pub fn focus(&self) -> Result<()> {
-        let e = self.element()?;
-        native::activate(self.pid)?;
-        unsafe {
-            e.SetFocus()?;
+    pub fn same(&self, other: &Self) -> bool {
+        if self.pid != other.pid {
+            return false;
         }
-        if !self.has_focus()? {
-            return Err(Error::access("The target did not receive keyboard focus"));
+        match (&self.element, &other.element) {
+            (Some(a), Some(b)) => {
+                unsafe { self.automation.CompareElements(a, b) }.is_ok_and(|v| v.as_bool())
+            }
+            (None, None) => true,
+            _ => false,
+        }
+    }
+    pub fn check_control(&self) -> Result<()> {
+        self.element().map(|_| ())
+    }
+    pub fn focus_native(&self) -> Result<()> {
+        unsafe {
+            self.element()?.SetFocus()?;
         }
         Ok(())
+    }
+    pub fn selected_text(&self, text: &str) -> Result<()> {
+        if !self.writable()? {
+            return Err(Error::usage("Target is not a writable text control"));
+        }
+        self.focus()?;
+        crate::application::require_foreground(self.pid)?;
+        if !self.has_focus()? {
+            return Err(Error::access("Target lost focus"));
+        }
+        native::text(self.pid, text)
     }
     pub fn set_value(&self, text: &str) -> Result<()> {
         if !self.writable()? {

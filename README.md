@@ -276,9 +276,10 @@ is the intended conversation. Step 6 sends the message and requires authorizatio
 ## Project layout
 
 ```text
-shared/                 command metadata, parsing, safety helpers, tree traversal
-macos/src/              native AX, AppKit, Quartz input, clipboard, and test fixture
-windows/src/            native UI Automation, Win32 input, clipboard, and fixture
+shared/                 shared CLI, validation, activation, guarded input, tree traversal
+adapters/mod.rs         selects the platform adapter at compile time
+macos/src/              macOS adapter: AX, AppKit, Quartz, clipboard, and test fixture
+windows/src/            Windows adapter: UI Automation, Win32, clipboard, and fixture
 spec/                   RSpec CLI and live desktop behavior
 ```
 

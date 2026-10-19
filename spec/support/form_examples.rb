@@ -1,7 +1,6 @@
 require 'support/desktop_fixture'
 
 RSpec.shared_examples 'a three-field form' do
-
   it 'exposes three text fields with the draft in the second position' do
     fields = app('find', '--role', 'AXTextField').fetch('matches').reject { |field| field['subrole'] == 'AXSecureTextField' }
     expect(fields.map { |field| field.fetch('title') }).to eq(['First field', 'Draft', 'Third field'])
@@ -98,5 +97,29 @@ RSpec.shared_examples 'a three-field form' do
       expect_not_submitted
       expect_label('Submission count: 0')
     end
+  end
+
+  it 'supports an empty verified paste without inserting or submitting text' do
+    set_draft('old draft')
+    expect(app('paste', '--target-path', draft, '--text', '')).to include('verified' => true)
+    expect(draft_value).to eq('')
+    expect_not_submitted
+  end
+
+  it 'preserves character counts and optional PID output through the shared typing workflow' do
+    message = "e\u0301🙂"
+    app('focus', '--path', draft)
+    result = app('type', '--text', message)
+    expect(result).to include('pid' => @fixture_pid, 'characters' => (Blindly::WINDOWS ? 3 : 2))
+    expect(draft_value).to eq(message)
+    set_draft('')
+    app('focus', '--path', draft)
+    implicit = success('type', '--text', message)
+    expect(implicit.key?('pid')).to eq(Blindly::WINDOWS)
+    expect(implicit['pid']).to eq(@fixture_pid) if Blindly::WINDOWS
+    expect(implicit.fetch('characters')).to eq(result.fetch('characters'))
+    expect(draft_value).to eq(message)
+    expect_untouched_neighbors
+    expect_not_submitted
   end
 end

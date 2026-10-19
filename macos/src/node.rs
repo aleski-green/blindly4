@@ -1,7 +1,8 @@
+use super::ax;
+use super::native;
 use crate::{
-    ax,
     error::{Error, Result},
-    guards, native,
+    guards,
 };
 use core_foundation::{base::CFType, boolean::CFBoolean, string::CFString};
 use serde_json::{Value, json};
@@ -13,6 +14,9 @@ pub struct Node {
     root: bool,
 }
 impl Node {
+    pub fn pid(&self) -> i32 {
+        self.pid
+    }
     pub fn root(pid: i32) -> Result<Self> {
         Self::application(pid)
     }
@@ -36,17 +40,6 @@ impl Node {
             pid: self.pid,
             root: false,
         })
-    }
-    pub fn resolve(&self, path: &str) -> Result<Self> {
-        let mut node = self.clone();
-        for index in guards::path(path)? {
-            node = node.children()?.into_iter().nth(index).ok_or_else(|| {
-                Error::access(format!(
-                    "Path {path} no longer exists; rediscover the target"
-                ))
-            })?;
-        }
-        Ok(node)
     }
     pub fn same(&self, other: &Self) -> bool {
         self.element == other.element
@@ -129,18 +122,6 @@ impl Node {
         }
         Ok(false)
     }
-    pub fn require_focused_draft(&self, expected: &str) -> Result<()> {
-        if self.writable()?
-            && self.has_focus()?
-            && self.exact_draft(expected)?
-            && native::foreground_pid() == self.pid
-        {
-            return Ok(());
-        }
-        Err(Error::access(
-            "Input blocked: writable target, keyboard focus, exact draft and foreground PID must all match. Do not send.",
-        ))
-    }
     pub fn selected(&self) -> Result<bool> {
         Ok(self.value_of("AXSelected")? == Some(json!(true)))
     }
@@ -210,21 +191,15 @@ impl Node {
         }
         Ok(children)
     }
-    fn control(&self) -> Result<()> {
+    pub fn check_control(&self) -> Result<()> {
         if self.root {
             Err(Error::usage("Choose a control path"))
         } else {
             Ok(())
         }
     }
-    pub fn focus(&self) -> Result<()> {
-        self.control()?;
-        native::activate(self.pid)?;
-        ax::set(&self.element, "AXFocused", &CFBoolean::true_value())?;
-        if !self.has_focus()? {
-            return Err(Error::access("The target did not receive keyboard focus"));
-        }
-        Ok(())
+    pub fn focus_native(&self) -> Result<()> {
+        ax::set(&self.element, "AXFocused", &CFBoolean::true_value())
     }
     pub fn set_value(&self, text: &str) -> Result<()> {
         if !self.writable()? {
@@ -238,11 +213,11 @@ impl Node {
                 "Selected text target must be writable and focused",
             ));
         }
-        native::require_foreground(self.pid)?;
+        crate::application::require_foreground(self.pid)?;
         ax::set(&self.element, "AXSelectedText", &CFString::new(text))
     }
     fn perform(&self, name: &str) -> Result<()> {
-        self.control()?;
+        self.check_control()?;
         if !self.actions()?.iter().any(|action| action == name) {
             return Err(Error::usage(format!("Target does not support {name}")));
         }

@@ -22,17 +22,16 @@ runtime is used. Windows builds use `windows/build.ps1`.
 
 ## Coverage
 
-- `macos_cli_spec.rb`: numeric and path validation, URL/key rejection, complete
-  guard requirements, platform output, and opt-in fixture launch.
+- `macos_cli_spec.rb`: native output conventions and opt-in fixture launch.
 - `macos_desktop_spec.rb`: real Apple Accessibility and Quartz input against a
   Rust/AppKit form, including the shared three-field scenarios, password redaction,
   Unicode, exact draft checks, focus guards, popup menus, and checkboxes.
-- `support/form_examples.rb`: shared three-field form scenarios for both platforms.
+- `support/form_examples.rb`: shared three-field scenarios, empty guarded paste,
+  and character-count/PID compatibility checks for both platforms.
 
-- `cli_spec.rb`: shared command discovery, help, risk classifications, option
-  rejection, removed commands, and invocation-local profiling.
-- `windows_cli_spec.rb`: the complete Windows schema-v2 fixture, strict numeric
-  arguments, URL restrictions, key validation, and incomplete safety guards.
+- `cli_spec.rb`: shared command discovery, help, risk classifications, numeric/URL/key
+  validation, guard requirements, option rejection, and invocation-local profiling.
+- `windows_cli_spec.rb`: the complete Windows schema-v2 fixture and native error precedence.
 - `windows_desktop_spec.rb`: real UI Automation and SendInput against a local
   native window, including traversal bounds, Unicode paste/type, exact matching,
   keyboard aliases, focus guards, password redaction, and rejected input with no

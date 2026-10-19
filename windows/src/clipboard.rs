@@ -1,7 +1,5 @@
-use crate::{
-    error::{Error, Result},
-    native,
-};
+use super::native;
+use crate::error::{Error, Result};
 use std::{thread::sleep, time::Duration};
 use windows::{
     Win32::{
@@ -126,7 +124,7 @@ pub struct Clipboard {
     replacement_sequence: Option<u32>,
 }
 impl Clipboard {
-    pub fn capture_all_formats() -> Result<Self> {
+    pub fn capture() -> Result<Self> {
         let owner = unsafe {
             CreateWindowExW(
                 WINDOW_EX_STYLE::default(),

@@ -1,13 +1,10 @@
 use crate::{
-    clipboard::Clipboard,
     error::{Error, Result},
     guards,
     invocation::Invocation,
-    native,
-    node::Node,
+    platform::{self, Clipboard, Node},
 };
 use serde_json::{Value, json};
-use unicode_segmentation::UnicodeSegmentation;
 
 // Validate syntax before requesting Accessibility access or touching the UI.
 pub fn validate(command: &str, i: &Invocation) -> Result<()> {
@@ -60,7 +57,7 @@ pub fn validate(command: &str, i: &Invocation) -> Result<()> {
             }
         }
         "key" => {
-            native::parse_key(i.value("key")?)?;
+            platform::parse_key(i.value("key")?)?;
             i.pair("target-path", "require-value", true)?;
             if i.has("target-path")
                 && (i.value("target-path")?.is_empty()
@@ -83,11 +80,11 @@ pub fn validate(command: &str, i: &Invocation) -> Result<()> {
 }
 fn target(i: &Invocation) -> Result<i32> {
     let pid = i.pid()?;
-    native::activate(pid)?;
+    crate::application::activate(pid)?;
     Ok(pid)
 }
 fn response(i: &Invocation, pid: i32, mut result: Value) -> Result<()> {
-    if i.has("pid") {
+    if platform::report_pid(i.has("pid")) {
         result["pid"] = json!(pid);
     }
     crate::json(&result)
@@ -109,29 +106,29 @@ fn direction(i: &Invocation) -> Result<String> {
 pub fn click(i: &Invocation) -> Result<()> {
     let (x, y) = coordinates(i)?;
     let pid = target(i)?;
-    native::click(pid, x, y)?;
+    platform::click(pid, x, y)?;
     response(i, pid, json!({"x": x, "y": y, "ok": true}))
 }
 pub fn type_text(i: &Invocation) -> Result<()> {
     let text = i.value("text")?;
     let pid = target(i)?;
-    native::text(pid, text)?;
+    platform::text(pid, text)?;
     response(
         i,
         pid,
-        json!({"characters": text.graphemes(true).count(), "ok": true}),
+        json!({"characters": platform::characters(text), "ok": true}),
     )
 }
 pub fn key(i: &Invocation) -> Result<()> {
     let key = i.value("key")?;
-    let parsed = native::parse_key(key)?;
+    let parsed = platform::parse_key(key)?;
     let pid = target(i)?;
     if let Some(path) = i.optional("target-path") {
         Node::application(pid)?
             .resolve(path)?
             .require_focused_draft(i.value("require-value")?)?;
     }
-    native::key(pid, parsed)?;
+    platform::key(pid, &parsed)?;
     let mut result = json!({"key": key, "ok": true});
     if let Some(path) = i.optional("target-path") {
         result["targetPath"] = json!(path);
@@ -151,7 +148,7 @@ pub fn scroll(i: &Invocation) -> Result<()> {
     let direction = direction(i)?;
     let amount = i.integer("amount", 3, 1, 100)?;
     let pid = target(i)?;
-    native::scroll(pid, &direction, amount)?;
+    platform::scroll(pid, &direction, amount)?;
     response(
         i,
         pid,
@@ -170,7 +167,7 @@ pub fn paste(i: &Invocation) -> Result<()> {
         }
     }
     let mut clipboard = Clipboard::capture()?;
-    native::activate(pid)?;
+    crate::application::activate(pid)?;
     // Re-resolve after activation; reject path changes instead of editing a new control.
     let resolve = || -> Result<Option<Node>> {
         let current = path.map(|p| root.resolve(p)).transpose()?;
@@ -195,15 +192,15 @@ pub fn paste(i: &Invocation) -> Result<()> {
         }
         // Pasting an empty string is already complete after the verified clear.
         if !text.is_empty() || path.is_none() {
-            native::key(pid, native::parse_key("command+v")?)?;
+            platform::key(pid, &platform::parse_key("command+v")?)?;
         }
         if path.is_some() {
             for _ in 0..100 {
-                native::wait(0.01);
+                platform::wait(0.01);
                 if let Some(node) = resolve()? {
                     if node.exact_draft(text)?
                         && node.has_focus()?
-                        && native::foreground_pid() == pid
+                        && platform::foreground_pid() == pid
                     {
                         return Ok(());
                     }
@@ -213,13 +210,13 @@ pub fn paste(i: &Invocation) -> Result<()> {
                 "Paste failed exact draft verification; do not send or repeat input without inspecting the draft",
             ));
         }
-        native::wait(0.3);
+        platform::wait(0.3);
         Ok(())
     })();
     let restoration = clipboard.restore();
     outcome?;
     restoration?;
-    let mut result = json!({"characters": text.graphemes(true).count(), "ok": true});
+    let mut result = json!({"characters": platform::characters(text), "ok": true});
     if let Some(path) = path {
         result["targetPath"] = json!(path);
         result["verified"] = json!(true);
