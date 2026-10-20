@@ -14,19 +14,27 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          dotnet-version: '10.0.x'
-      - name: Build self-contained executable
-        shell: pwsh
-        run: ./windows/build.ps1 -Runtime ${{ matrix.runtime }}
-      - name: Permission-free checks and schema
+          components: rustfmt, clippy
+      - name: Rust format and lint
+        working-directory: windows
         shell: pwsh
         run: |
-          & ./.build/windows/blindly4.exe --self-test
-          if ($LASTEXITCODE) { throw 'Self-test failed' }
-          & ./.build/windows/blindly4.exe schema
-          if ($LASTEXITCODE) { throw 'Schema failed' }
+          cargo fmt --check
+          if ($LASTEXITCODE) { throw 'Formatting failed' }
+          cargo clippy --all-targets -- -D warnings
+          if ($LASTEXITCODE) { throw 'Clippy failed' }
+      - name: Build native executable
+        shell: pwsh
+        run: ./windows/build.ps1 -Runtime ${{ matrix.runtime }}
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+      - name: RSpec CLI behavior
+        run: |
+          bundle install
+          bundle exec rspec
       - uses: actions/upload-artifact@v4
         with:
           name: blindly4-${{ matrix.runtime }}
