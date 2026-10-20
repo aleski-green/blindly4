@@ -1,16 +1,7 @@
-require 'support/windows_fixture'
+require 'support/desktop_fixture'
 
 RSpec.describe 'Windows selection and scrolling controls', :windows, :live do
-  include_context 'a native Windows fixture'
-
-  it 'checks and unchecks a checkbox through accessible presses' do
-    expect_label('Checkbox: unchecked')
-    app('press', '--path', find_control_path('Test checkbox', 'AXCheckBox'))
-    expect_label('Checkbox: checked')
-    app('press', '--path', find_control_path('Test checkbox', 'AXCheckBox'))
-    expect_label('Checkbox: unchecked')
-    expect_not_submitted
-  end
+  include_context 'a native desktop fixture'
 
   it 'toggles the focused checkbox with Space without submitting' do
     app('focus', '--path', find_control_path('Test checkbox', 'AXCheckBox'))

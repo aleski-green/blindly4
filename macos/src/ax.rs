@@ -69,9 +69,23 @@ pub fn pid(value: &CFType) -> Result<i32> {
 }
 pub fn attribute(element: &CFType, name: &str) -> Result<Option<CFType>> {
     // Missing attributes are normal; IPC failures must propagate.
-    copied(&format!("Read {name}"), &[kAXErrorAttributeUnsupported, kAXErrorNoValue], |out| unsafe {
-        AXUIElementCopyAttributeValue(raw(element), CFString::new(name).as_concrete_TypeRef(), out)
-    })
+    let mut status = kAXErrorSuccess;
+    let value = copied(&format!("Read {name}"), &[kAXErrorAttributeUnsupported, kAXErrorNoValue], |out| unsafe {
+        status = AXUIElementCopyAttributeValue(raw(element), CFString::new(name).as_concrete_TypeRef(), out);
+        status
+    })?;
+    if name == "AXValue" && status == kAXErrorNoValue {
+        let text = |key| -> Result<String> {
+            Ok(attribute(element, key)?.and_then(|v| v.downcast::<CFString>()).map(|v| v.to_string()).unwrap_or_default())
+        };
+        if matches!(text("AXRole")?.as_str(), "AXTextField" | "AXTextArea" | "AXComboBox")
+            && text("AXSubrole")? != "AXSecureTextField"
+            && attribute(element, "AXNumberOfCharacters")?.and_then(|v| v.downcast::<CFNumber>()).and_then(|n| n.to_i64()) == Some(0)
+        {
+            return Ok(Some(CFString::new("").as_CFType()));
+        }
+    }
+    Ok(value)
 }
 pub fn array(value: &CFType) -> Result<Vec<CFType>> {
     let array = value.downcast::<CFArray>().ok_or_else(|| Error::access("Accessibility returned a non-array"))?;
@@ -83,9 +97,17 @@ pub fn names(element: &CFType, actions: bool) -> Result<Vec<String>> {
     } else {
         (AXUIElementCopyAttributeNames, "List AX attributes", &[])
     };
-    let Some(value) = copied(operation, absent, |out| unsafe { copy(raw(element), out.cast()) })? else {
+    let mut value = ptr::null();
+    let status = unsafe { copy(raw(element), &mut value) };
+    let empty_touch_bar = actions
+        && status == kAXErrorFailure
+        && attribute(element, "AXRole")?.as_ref().and_then(json_value).as_ref().and_then(Value::as_str)
+            == Some("AXFunctionRowTopLevelElement");
+    if absent.contains(&status) || empty_touch_bar {
         return Ok(vec![]);
-    };
+    }
+    check(status, operation)?;
+    let value = owned(value.cast())?;
     let mut names: Vec<_> = array(&value)?.iter().filter_map(|v| v.downcast::<CFString>().map(|s| s.to_string())).collect();
     names.sort();
     Ok(names)

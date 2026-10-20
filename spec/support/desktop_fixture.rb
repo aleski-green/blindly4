@@ -4,7 +4,8 @@ module DesktopFixture
   def start_fixture_with_live_opt_in
     raise 'Live desktop scenarios require BLINDLY4_LIVE=1' unless ENV['BLINDLY4_LIVE'] == '1'
 
-    @fixture_pid = Process.spawn([Blindly::BINARY, Blindly::BINARY], '--test-app',
+    @fixture_pid = Process.spawn({ 'BLINDLY4_FIXTURE_VALUE' => RSpec.current_example.metadata[:value_mode] },
+                                 [Blindly::BINARY, Blindly::BINARY], '--test-app',
                                  in: File::NULL, out: File::NULL, err: File::NULL)
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
     previous_ready = nil
@@ -51,10 +52,14 @@ module DesktopFixture
     result.json
   end
 
-  def find_control_path(title, role)
-    matches = app('find', '--title', title, '--role', role, '--depth', '6').fetch('matches')
+  def find_control(title, role = nil)
+    matches = app('find', '--title', title, '--depth', 6, *(role ? ['--role', role] : [])).fetch('matches')
     expect(matches.length).to eq(1), "Expected one #{role} named #{title}, got #{matches.inspect}"
-    matches.first.fetch('path')
+    matches.first
+  end
+
+  def find_control_path(title, role)
+    find_control(title, role).fetch('path')
   end
 
   def draft
@@ -78,7 +83,7 @@ module DesktopFixture
   end
 
   def field_value(title)
-    app('inspect', '--path', find_control_path(title, 'AXTextField')).fetch('value')
+    find_control(title, 'AXTextField').fetch('value')
   end
 
   def visible_label(prefix)
@@ -98,6 +103,27 @@ module DesktopFixture
 
   def expect_label(text)
     wait_for_observed_state("Visible label #{text.inspect}") { visible_label(text) == text }
+  end
+
+  def with_clipboard_fixture
+    Open3.popen3([Blindly::BINARY, Blindly::BINARY], '--test-pasteboard') do |input, output, error, process|
+      begin
+        yield lambda { |request|
+          input.puts(JSON.generate(request)); input.flush
+          JSON.parse(Timeout.timeout(5) { output.gets })
+        }
+      ensure
+        input.close
+        begin
+          status = Timeout.timeout(5) { process.value.exitstatus }
+        rescue Timeout::Error
+          Process.kill('KILL', process.pid)
+          process.join
+          raise
+        end
+        expect(status).to eq(0), error.read
+      end
+    end
   end
 
   def expect_untouched_neighbors

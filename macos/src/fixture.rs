@@ -1,12 +1,42 @@
-//! Harmless native form. RSpec owns assertions and process cleanup.
 use crate::error::{Error, Result};
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, rc::Retained, sel};
 use objc2_app_kit::{
     NSAccessibility, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSButton, NSMenu, NSMenuItem, NSPopUpButton,
     NSScrollView, NSSecureTextField, NSTextField, NSView, NSWindow, NSWindowStyleMask,
 };
-use objc2_foundation::{MainThreadMarker, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
+use objc2_foundation::{MainThreadMarker, NSArray, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
 use std::cell::Cell;
+
+define_class!(
+    #[unsafe(super = NSTextField)]
+    #[thread_kind = MainThreadOnly]
+    struct OptionalValueField;
+    unsafe impl NSObjectProtocol for OptionalValueField {}
+    impl OptionalValueField {
+        #[unsafe(method(accessibilityValue))]
+        fn ax_value(&self) -> *mut NSString {
+            let value = self.stringValue();
+            if value.is_empty() || std::env::var("BLINDLY4_FIXTURE_VALUE").as_deref() != Ok("empty") { std::ptr::null_mut() } else { Retained::autorelease_ptr(value) }
+        }
+        #[unsafe(method(accessibilityNumberOfCharacters))]
+        fn character_count(&self) -> isize {
+            if std::env::var("BLINDLY4_FIXTURE_VALUE").as_deref() == Ok("invalid-count") { -1 } else { self.stringValue().length() as isize }
+        }
+    }
+);
+
+define_class!(
+    #[unsafe(super = NSView)]
+    #[thread_kind = MainThreadOnly]
+    struct FunctionRow;
+    unsafe impl NSObjectProtocol for FunctionRow {}
+    impl FunctionRow {
+        #[unsafe(method(accessibilityActionNames))]
+        fn action_names(&self) -> *mut NSArray<NSString> {
+            std::ptr::null_mut()
+        }
+    }
+);
 
 struct State {
     draft: Retained<NSTextField>,
@@ -56,7 +86,13 @@ fn label(view: &NSView, text: &str, y: f64, mtm: MainThreadMarker) -> Retained<N
     field
 }
 fn text_field(view: &NSView, title: &str, value: &str, y: f64, mtm: MainThreadMarker) -> Retained<NSTextField> {
-    let field = NSTextField::initWithFrame(NSTextField::alloc(mtm), rect(20.0, y, 580.0, 28.0));
+    let field: Retained<NSTextField> = if title == "Draft" && std::env::var_os("BLINDLY4_FIXTURE_VALUE").is_some() {
+        let field: Retained<OptionalValueField> =
+            unsafe { msg_send![OptionalValueField::alloc(mtm), initWithFrame: rect(20.0, y, 580.0, 28.0)] };
+        field.into_super()
+    } else {
+        NSTextField::initWithFrame(NSTextField::alloc(mtm), rect(20.0, y, 580.0, 28.0))
+    };
     field.setStringValue(&NSString::from_str(value));
     field.setAccessibilityTitle(Some(&NSString::from_str(title)));
     field.setAccessibilityIdentifier(Some(&NSString::from_str(title)));
@@ -70,7 +106,6 @@ fn menu(app: &NSApplication, mtm: MainThreadMarker) {
     item.setTitle(&NSString::from_str("Edit"));
     item.setSubmenu(Some(&edit));
     main.addItem(&item);
-    // Standard responder-chain editing actions for the standalone AppKit process.
     unsafe {
         edit.addItemWithTitle_action_keyEquivalent(&NSString::from_str("Copy"), Some(sel!(copy:)), &NSString::from_str("c"));
         edit.addItemWithTitle_action_keyEquivalent(&NSString::from_str("Paste"), Some(sel!(paste:)), &NSString::from_str("v"));
@@ -86,7 +121,6 @@ pub fn run() -> Result<()> {
     let app = NSApplication::sharedApplication(mtm);
     app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
     menu(&app, mtm);
-    // Retained throughout the event loop; disable AppKit's automatic release.
     let window = unsafe {
         NSWindow::initWithContentRect_styleMask_backing_defer(
             NSWindow::alloc(mtm),
@@ -101,6 +135,10 @@ pub fn run() -> Result<()> {
     }
     window.setTitle(&NSString::from_str("Blindly4 macOS test fixture"));
     let view = window.contentView().ok_or_else(|| Error::unexpected("Fixture has no content view"))?;
+    let function_row: Retained<FunctionRow> = unsafe { msg_send![FunctionRow::alloc(mtm), initWithFrame: rect(0.0, 0.0, 20.0, 20.0)] };
+    function_row.setAccessibilityElement(true);
+    function_row.setAccessibilityRole(Some(&NSString::from_str("AXFunctionRowTopLevelElement")));
+    view.addSubview(&function_row);
     label(&view, "Fixture ready", 680.0, mtm);
     text_field(&view, "First field", "first untouched", 640.0, mtm);
     let draft = text_field(&view, "Draft", "", 600.0, mtm);
@@ -118,7 +156,6 @@ pub fn run() -> Result<()> {
         count: Cell::new(0),
     };
     let controller: Retained<Controller> = unsafe { msg_send![super(Controller::alloc(mtm).set_ivars(state)), init] };
-    // Targets remain alive throughout the event loop; selectors match Controller.
     unsafe {
         let submit =
             NSButton::buttonWithTitle_target_action(&NSString::from_str("Submit test draft"), Some(&controller), Some(sel!(submit:)), mtm);

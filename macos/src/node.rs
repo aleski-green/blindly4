@@ -59,7 +59,14 @@ impl Node {
         ax::names(&self.element, true)
     }
     pub fn properties(&self) -> Result<std::collections::BTreeMap<String, Value>> {
-        ax::attributes(&self.element, crate::element::ATTRIBUTES)
+        let mut values = ax::attributes(&self.element, crate::element::ATTRIBUTES)?;
+        if !values.contains_key("AXValue")
+            && matches!(values.get("AXRole").and_then(Value::as_str), Some("AXTextField" | "AXTextArea" | "AXComboBox"))
+            && let Some(value) = self.property("AXValue")?
+        {
+            values.insert("AXValue".into(), value);
+        }
+        Ok(values)
     }
     pub fn attribute_names(&self) -> Result<Option<Vec<String>>> {
         ax::names(&self.element, false).map(Some)
