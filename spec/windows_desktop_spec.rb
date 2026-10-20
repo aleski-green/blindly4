@@ -51,7 +51,7 @@ RSpec.describe 'Windows desktop behavior', :windows, :live do
     end
     rejected_app(64, 'set-value', '--path', '', '--value', 'never entered')
     rejected_app(64, 'paste', '--target-path', '', '--text', 'never entered')
-    rejected_app(77, 'key', '--key', 'enter', '--target-path', '', '--require-value', 'unchanged')
+    rejected_app(64, 'key', '--key', 'enter', '--target-path', '', '--require-value', 'unchanged')
     expect(draft_value).to eq('unchanged')
     expect_not_submitted
   end
