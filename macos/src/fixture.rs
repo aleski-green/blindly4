@@ -5,8 +5,22 @@ use objc2_app_kit::{
     NSAccessibility, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSButton, NSMenu, NSMenuItem, NSPopUpButton,
     NSScrollView, NSSecureTextField, NSTextField, NSView, NSWindow, NSWindowStyleMask,
 };
-use objc2_foundation::{MainThreadMarker, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
+use objc2_foundation::{MainThreadMarker, NSArray, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
 use std::cell::Cell;
+
+// Reproduce the virtual function row's unavailable action metadata over real AX IPC.
+define_class!(
+    #[unsafe(super = NSView)]
+    #[thread_kind = MainThreadOnly]
+    struct FunctionRow;
+    unsafe impl NSObjectProtocol for FunctionRow {}
+    impl FunctionRow {
+        #[unsafe(method(accessibilityActionNames))]
+        fn action_names(&self) -> *mut NSArray<NSString> {
+            std::ptr::null_mut()
+        }
+    }
+);
 
 struct State {
     draft: Retained<NSTextField>,
@@ -101,6 +115,10 @@ pub fn run() -> Result<()> {
     }
     window.setTitle(&NSString::from_str("Blindly4 macOS test fixture"));
     let view = window.contentView().ok_or_else(|| Error::unexpected("Fixture has no content view"))?;
+    let function_row: Retained<FunctionRow> = unsafe { msg_send![FunctionRow::alloc(mtm), initWithFrame: rect(0.0, 0.0, 20.0, 20.0)] };
+    function_row.setAccessibilityElement(true);
+    function_row.setAccessibilityRole(Some(&NSString::from_str("AXFunctionRowTopLevelElement")));
+    view.addSubview(&function_row);
     label(&view, "Fixture ready", 680.0, mtm);
     text_field(&view, "First field", "first untouched", 640.0, mtm);
     let draft = text_field(&view, "Draft", "", 600.0, mtm);

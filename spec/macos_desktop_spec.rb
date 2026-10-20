@@ -30,6 +30,24 @@ RSpec.describe 'A native macOS form', :macos, :live do
     expect_not_submitted
   end
 
+  it 'traverses the virtual Touch Bar without treating it as an actionable control' do
+    tree = app('tree', '--depth', 12, '--max-nodes', 1000)
+    expect(tree.fetch('truncated')).to be(false)
+    expect(tree.to_json).to include('AXFunctionRowTopLevelElement')
+    row = app('find', '--role', 'AXFunctionRowTopLevelElement', '--depth', 2).fetch('matches').fetch(0)
+    path = row.fetch('path')
+    expect(app('inspect', '--path', path)).to include('role' => 'AXFunctionRowTopLevelElement', 'actions' => [])
+    expect(app('actions', '--path', path).fetch('actions')).to eq([])
+    outline = cli('show', '--pid', @fixture_pid, '--depth', 2)
+    expect(outline.status).to eq(0)
+    expect(outline.stdout).to include('AXFunctionRowTopLevelElement')
+    rejected_app(64, 'press', '--path', path)
+    expect(app('actions', '--path', submit).fetch('actions')).to include('AXPress')
+    expect(draft_value).to eq('')
+    expect_untouched_neighbors
+    expect_not_submitted
+  end
+
   ['old draft', ' draft', 'draft ', "draft\n", 'Draft'].each do |actual|
     it "rejects the nonmatching draft #{actual.inspect} without submission or editing" do
       set_draft(actual)

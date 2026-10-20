@@ -83,9 +83,19 @@ pub fn names(element: &CFType, actions: bool) -> Result<Vec<String>> {
     } else {
         (AXUIElementCopyAttributeNames, "List AX attributes", &[])
     };
-    let Some(value) = copied(operation, absent, |out| unsafe { copy(raw(element), out.cast()) })? else {
+    let mut value = ptr::null();
+    let status = unsafe { copy(raw(element), &mut value) };
+    // AppKit's virtual Touch Bar container returns failure instead of an empty action list.
+    // Only normalize this role/error pair; permission, stale-element and IPC failures stay errors.
+    let empty_touch_bar = actions
+        && status == kAXErrorFailure
+        && attribute(element, "AXRole")?.as_ref().and_then(json_value).as_ref().and_then(Value::as_str)
+            == Some("AXFunctionRowTopLevelElement");
+    if absent.contains(&status) || empty_touch_bar {
         return Ok(vec![]);
-    };
+    }
+    check(status, operation)?;
+    let value = owned(value.cast())?;
     let mut names: Vec<_> = array(&value)?.iter().filter_map(|v| v.downcast::<CFString>().map(|s| s.to_string())).collect();
     names.sort();
     Ok(names)
