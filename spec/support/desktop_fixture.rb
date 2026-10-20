@@ -4,15 +4,20 @@ module DesktopFixture
   def start_fixture_with_live_opt_in
     raise 'Live desktop scenarios require BLINDLY4_LIVE=1' unless ENV['BLINDLY4_LIVE'] == '1'
 
-    @fixture_pid = Process.spawn({ 'BLINDLY4_FIXTURE_VALUE' => RSpec.current_example.metadata[:value_mode] },
+    metadata = RSpec.current_example.metadata
+    @fixture_pid = Process.spawn({ 'BLINDLY4_FIXTURE_VALUE' => metadata[:value_mode],
+                                  'BLINDLY4_FIXTURE_PASTE' => metadata[:paste_mode],
+                                  'BLINDLY4_FIXTURE_CHILD' => metadata[:child_process] ? '1' : nil,
+                                  'BLINDLY4_FIXTURE_BACKGROUND' => metadata[:background_start] ? '1' : nil },
                                  [Blindly::BINARY, Blindly::BINARY], '--test-app',
                                  in: File::NULL, out: File::NULL, err: File::NULL)
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
     previous_ready = nil
     loop do
-      frontmost = success('apps').fetch('apps').any? { |app| app.fetch('pid') == @fixture_pid && (!Blindly::WINDOWS || app.fetch('frontmost')) }
-      if frontmost
-        frontmost = cli('activate', '--pid', @fixture_pid).status == 0 if Blindly::MACOS
+      visible = success('apps').fetch('apps').any? { |app| app.fetch('pid') == @fixture_pid }
+      if visible
+        activation = cli('activate', '--pid', @fixture_pid)
+        frontmost = activation.status == 0
         ready = cli('find', '--pid', @fixture_pid, '--title', 'Fixture ready', '--role', 'AXStaticText', '--limit', '1')
         observed = ready.status == 0 ? ready.json : nil
         settled = frontmost && observed && observed.fetch('matches').any? { |row| row.fetch('title') == 'Fixture ready' }
@@ -20,7 +25,9 @@ module DesktopFixture
         previous_ready = settled ? observed : nil
       end
       raise 'The fixture exited before opening' if Process.waitpid(@fixture_pid, Process::WNOHANG)
-      raise 'The fixture was not ready in the foreground within 10 seconds' if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+      if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+        raise "The fixture was not ready in the foreground within 10 seconds; activation: #{activation&.stdout}; readiness: #{observed.inspect}"
+      end
       sleep 0.1
     end
   end

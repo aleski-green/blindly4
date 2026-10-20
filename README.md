@@ -17,6 +17,8 @@ Invoke directly: `blindly4 schema` lists options, risks and permissions; `--help
 
 ## Safe operation
 
+On Windows, `pid` identifies the application window owner. A cross-process UI Automation provider is accepted only when its nearest native window belongs to a visible top-level window owned by that PID. This supports Chromium's separate providers without accepting unrelated windows; foreground, path identity and draft guards still apply.
+
 - Serialize whole workflows across apps; input, focus and clipboard are shared. Keep Sapiens4 host ownership; standalone callers supply coordination.
 - Input needs `--pid`. Verify app/recipient/writable child; rediscover paths before mutation. Never invent changing child indexes or infer writability from focus. Use `--require-selected` for selectable press targets.
 - Authorized sends require fresh PID/paths and guards below, or focused `key --pid PID --key return --target-path COMPOSER --require-value TEXT`. Never send with bare `type` then Return.
@@ -28,7 +30,7 @@ blindly4 press --pid PID --path SEND --expect-description Send --require-value-p
 
 Guarded paste clears/verifies the target draft, allowing Unicode normalization/direction handling and up to one second before clipboard restoration. Guarded keys require PID, nonempty target/draft, matching focus/foreground app. Missing exact text fails closed. Reuse paste verification, but refresh send guards and inspect outcomes: `verified`, injected keys or empty composers do not prove delivery.
 
-Stop on errors. Confirmed *pre-input* nonwritable rejection permits one rediscovery/inspection and guarded-paste retry; missing focus permits one rediscovery/refocus. Never bypass draft/focus/send guards. Exit codes cannot prove absence of input; inspect uncertain input/submission before retrying.
+Stop on errors. Confirmed *pre-input* nonwritable rejection permits one rediscovery/inspection and guarded-paste retry; missing focus permits one rediscovery/refocus. Never bypass draft/focus/send guards. Exit codes cannot prove absence of input; inspect uncertain input/submission before retrying. An app consuming paste only after clipboard restoration can insert the restored clipboard text even after the command reports failure; a timeout is not a rollback.
 
 Commands read fresh state and exit; callers retain comparisons/audits. No universal unread state, service, cache, snapshots, leases or file logs. Traversals are bounded; `--profile` writes invocation-local stderr. Old service/workflow/snapshot commands, lease/log options and `BLINDLY4_LOG_*`/`BLINDLY4_NO_LOG` are obsolete. Preserve existing ignored logs.
 

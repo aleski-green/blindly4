@@ -2,6 +2,7 @@
 use super::native;
 use crate::error::{Error, Result};
 use serde_json::{Value, json};
+use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, IsWindowVisible};
 use windows::{
     Win32::{System::Com::*, UI::Accessibility::*},
     core::{BSTR, Interface},
@@ -27,16 +28,39 @@ impl Node {
         Self::root(pid)
     }
     pub fn focused(&self) -> Result<Self> {
-        self.with_same_process_element(unsafe { self.automation.GetFocusedElement()? })
+        self.with_application_element(unsafe { self.automation.GetFocusedElement()? })
     }
-    fn with_same_process_element(&self, element: IUIAutomationElement) -> Result<Self> {
+    fn require_application_element(&self, element: &IUIAutomationElement) -> Result<()> {
         let observed_pid = unsafe { element.CurrentProcessId()? };
-        if observed_pid != self.pid {
-            return Err(Error::access(format!(
-                "Target belongs to a different process (expected {}, observed {observed_pid}); rediscover the target",
-                self.pid
-            )));
+        if observed_pid == self.pid {
+            return Ok(());
         }
+        // Chromium providers may use another PID. Require native window ownership;
+        // process ancestry is insufficient. Never walk past the first HWND.
+        let walker = unsafe { self.automation.RawViewWalker()? };
+        let mut current = element.clone();
+        for _ in 0..128 {
+            let handle = unsafe { current.CurrentNativeWindowHandle()? };
+            if !handle.0.is_null() {
+                let root = unsafe { GetAncestor(handle, GA_ROOT) };
+                if !root.0.is_null() && native::window_pid(root) == self.pid && unsafe { IsWindowVisible(root).as_bool() } {
+                    return Ok(());
+                }
+                break;
+            }
+            let Some(parent) = nullable_uia_element(unsafe { walker.GetParentElement(&current) })? else { break };
+            if unsafe { self.automation.CompareElements(&current, &parent)?.as_bool() } {
+                break;
+            }
+            current = parent;
+        }
+        Err(Error::access(format!(
+            "Target belongs to a different application (expected window PID {}, provider PID {observed_pid}); rediscover the target",
+            self.pid
+        )))
+    }
+    fn with_application_element(&self, element: IUIAutomationElement) -> Result<Self> {
+        self.require_application_element(&element)?;
         Ok(Self { element: Some(element), pid: self.pid, automation: self.automation.clone() })
     }
     fn element(&self) -> Result<&IUIAutomationElement> {
@@ -169,7 +193,7 @@ impl Node {
                     if !has_expected_parent && !desktop_parented_combo_popup {
                         return Err(Error::access("Accessibility child changed parents; rediscover the target"));
                     }
-                    children.push(self.with_same_process_element(current.clone())?);
+                    children.push(self.with_application_element(current.clone())?);
                     if desktop_parented_combo_popup {
                         break;
                     }
@@ -177,7 +201,7 @@ impl Node {
                 }
             } else {
                 for window in native::windows()?.into_iter().filter(|w| w.pid == self.pid) {
-                    children.push(self.with_same_process_element(self.automation.ElementFromHandle(window.handle)?)?);
+                    children.push(self.with_application_element(self.automation.ElementFromHandle(window.handle)?)?);
                 }
             }
         }
@@ -195,6 +219,7 @@ impl Node {
     }
 
     pub fn focus_native(&self) -> Result<()> {
+        self.require_application_element(self.element()?)?;
         unsafe {
             self.element()?.SetFocus()?;
         }
@@ -204,6 +229,7 @@ impl Node {
         native::text(self.pid, text)
     }
     pub fn set_value_native(&self, text: &str) -> Result<()> {
+        self.require_application_element(self.element()?)?;
         unsafe {
             self.pattern::<IUIAutomationValuePattern>()?
                 .ok_or_else(|| Error::access("ValuePattern disappeared"))?
@@ -212,6 +238,7 @@ impl Node {
         Ok(())
     }
     pub fn perform(&self, name: &str) -> Result<()> {
+        self.require_application_element(self.element()?)?;
         if self.action(name, true)? { Ok(()) } else { Err(Error::usage(format!("Target does not support {name}"))) }
     }
 }
