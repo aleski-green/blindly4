@@ -1,4 +1,5 @@
 use super::native;
+pub mod fixture;
 use crate::error::{Error, Result};
 use std::{thread::sleep, time::Duration};
 use windows::{
@@ -164,6 +165,15 @@ impl Clipboard {
             EmptyClipboard()?;
         }
         let result = replacement.transfer_to_clipboard();
+        self.replacement_sequence = Some(unsafe { GetClipboardSequenceNumber() });
+        drop(_lock);
+        // Closing publishes synthesized text formats and advances the sequence.
+        // Reopen before recording it, and do not claim another window's copy.
+        let _lock = ClipboardLock::open(self.owner)?;
+        if unsafe { GetClipboardOwner()? } != self.owner {
+            self.replacement_sequence = None;
+            return Err(Error::access("Clipboard changed before paste; input blocked"));
+        }
         self.replacement_sequence = Some(unsafe { GetClipboardSequenceNumber() });
         result
     }

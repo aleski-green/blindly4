@@ -44,6 +44,13 @@ runtime is used. Windows builds use `windows/build.ps1`.
 - `windows_controls_spec.rb`: checkbox toggles by press and Space, exclusive list
   selection, dropdown opening/selection/closing and keyboard selection, actual
   wheel scrolling down/up, and bringing offscreen list options into view.
+- `windows_clipboard_spec.rb`: restores an empty clipboard, Unicode text, and
+  multiple binary formats after empty and nonempty verified paste. The opt-in
+  `--test-pasteboard` transport supplies native clipboard data and reads back its
+  format IDs and bytes; RSpec owns all assertions. Unlike macOS pasteboard items,
+  Windows exposes multiple formats for one clipboard item. It also checks that
+  fixture shutdown restores the pre-test clipboard. Concurrent clipboard changes
+  are not covered by these restoration tests.
 
 The tests intentionally verify platform-specific output where the existing Windows
 and macOS contracts differ. macOS usage errors use stderr; Windows usage errors are

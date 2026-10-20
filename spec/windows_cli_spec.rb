@@ -1,6 +1,14 @@
 require 'spec_helper'
 
 RSpec.describe 'The Windows CLI contract', :windows do
+  it 'requires explicit live opt-in for the clipboard fixture' do
+    output, error, status = Open3.capture3({ 'BLINDLY4_LIVE' => nil },
+                                         [Blindly::BINARY, Blindly::BINARY], '--test-pasteboard')
+    expect(status.exitstatus).to eq(64)
+    expect(error).to eq('')
+    expect(JSON.parse(output)).to include('code' => 'usage_error', 'error' => 'Clipboard fixture requires BLINDLY4_LIVE=1')
+  end
+
   it 'preserves the complete published schema-version-2 contract' do
     expected = JSON.parse(File.read(File.join(__dir__, 'fixtures', 'windows-schema-v2.json')))
     expect(success('schema')).to eq(expected)

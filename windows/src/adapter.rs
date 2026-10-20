@@ -46,7 +46,13 @@ pub fn prepare(command: &Command, invocation: &Invocation) -> Result<ComApartmen
     Ok(session)
 }
 pub fn fixture(args: &[String]) -> Option<Result<()>> {
-    (args == ["--test-app"]).then(fixture::run)
+    if args == ["--test-app"] {
+        Some(fixture::run())
+    } else if args == ["--test-pasteboard"] {
+        Some(clipboard::fixture::run())
+    } else {
+        None
+    }
 }
 pub fn help_requested(args: &[String], global: bool) -> bool {
     args == ["--help"] || (global && args == ["help"])
