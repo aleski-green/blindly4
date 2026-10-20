@@ -8,6 +8,25 @@ use objc2_app_kit::{
 use objc2_foundation::{MainThreadMarker, NSArray, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
 use std::cell::Cell;
 
+// Native text controls may expose no AXValue, including when their draft is empty.
+define_class!(
+    #[unsafe(super = NSTextField)]
+    #[thread_kind = MainThreadOnly]
+    struct OptionalValueField;
+    unsafe impl NSObjectProtocol for OptionalValueField {}
+    impl OptionalValueField {
+        #[unsafe(method(accessibilityValue))]
+        fn ax_value(&self) -> *mut NSString {
+            let value = self.stringValue();
+            if value.is_empty() || value.to_string().starts_with("unreadable") { std::ptr::null_mut() } else { Retained::autorelease_ptr(value) }
+        }
+        #[unsafe(method(accessibilityNumberOfCharacters))]
+        fn character_count(&self) -> isize {
+            if self.stringValue().to_string() == "unreadable count" { -1 } else { self.stringValue().length() as isize }
+        }
+    }
+);
+
 // Reproduce the virtual function row's unavailable action metadata over real AX IPC.
 define_class!(
     #[unsafe(super = NSView)]
@@ -70,7 +89,13 @@ fn label(view: &NSView, text: &str, y: f64, mtm: MainThreadMarker) -> Retained<N
     field
 }
 fn text_field(view: &NSView, title: &str, value: &str, y: f64, mtm: MainThreadMarker) -> Retained<NSTextField> {
-    let field = NSTextField::initWithFrame(NSTextField::alloc(mtm), rect(20.0, y, 580.0, 28.0));
+    let field: Retained<NSTextField> = if title == "Draft" {
+        let field: Retained<OptionalValueField> =
+            unsafe { msg_send![OptionalValueField::alloc(mtm), initWithFrame: rect(20.0, y, 580.0, 28.0)] };
+        field.into_super()
+    } else {
+        NSTextField::initWithFrame(NSTextField::alloc(mtm), rect(20.0, y, 580.0, 28.0))
+    };
     field.setStringValue(&NSString::from_str(value));
     field.setAccessibilityTitle(Some(&NSString::from_str(title)));
     field.setAccessibilityIdentifier(Some(&NSString::from_str(title)));

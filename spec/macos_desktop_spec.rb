@@ -48,6 +48,18 @@ RSpec.describe 'A native macOS form', :macos, :live do
     expect_not_submitted
   end
 
+  ['unreadable draft', 'unreadable count'].each do |actual|
+    it "does not infer an empty draft from #{actual.inspect}" do
+      set_draft(actual)
+      expect(app('inspect', '--path', draft)).not_to have_key('value')
+      app('focus', '--path', draft)
+      rejected_app(77, 'key', '--key', 'enter', '--target-path', draft, '--require-value', 'anything')
+      rejected_app(77, 'press', '--path', submit, '--require-value-path', draft, '--require-value', '')
+      expect_untouched_neighbors
+      expect_not_submitted
+    end
+  end
+
   ['old draft', ' draft', 'draft ', "draft\n", 'Draft'].each do |actual|
     it "rejects the nonmatching draft #{actual.inspect} without submission or editing" do
       set_draft(actual)

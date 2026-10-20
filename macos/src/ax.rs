@@ -69,9 +69,25 @@ pub fn pid(value: &CFType) -> Result<i32> {
 }
 pub fn attribute(element: &CFType, name: &str) -> Result<Option<CFType>> {
     // Missing attributes are normal; IPC failures must propagate.
-    copied(&format!("Read {name}"), &[kAXErrorAttributeUnsupported, kAXErrorNoValue], |out| unsafe {
-        AXUIElementCopyAttributeValue(raw(element), CFString::new(name).as_concrete_TypeRef(), out)
-    })
+    let mut status = kAXErrorSuccess;
+    let value = copied(&format!("Read {name}"), &[kAXErrorAttributeUnsupported, kAXErrorNoValue], |out| unsafe {
+        status = AXUIElementCopyAttributeValue(raw(element), CFString::new(name).as_concrete_TypeRef(), out);
+        status
+    })?;
+    // Some native text controls omit AXValue when empty. Only an explicit zero
+    // character count can establish an empty draft; missing data cannot.
+    if name == "AXValue" && status == kAXErrorNoValue {
+        let text = |key| -> Result<String> {
+            Ok(attribute(element, key)?.and_then(|v| v.downcast::<CFString>()).map(|v| v.to_string()).unwrap_or_default())
+        };
+        if matches!(text("AXRole")?.as_str(), "AXTextField" | "AXTextArea" | "AXComboBox")
+            && text("AXSubrole")? != "AXSecureTextField"
+            && attribute(element, "AXNumberOfCharacters")?.and_then(|v| v.downcast::<CFNumber>()).and_then(|n| n.to_i64()) == Some(0)
+        {
+            return Ok(Some(CFString::new("").as_CFType()));
+        }
+    }
+    Ok(value)
 }
 pub fn array(value: &CFType) -> Result<Vec<CFType>> {
     let array = value.downcast::<CFArray>().ok_or_else(|| Error::access("Accessibility returned a non-array"))?;
