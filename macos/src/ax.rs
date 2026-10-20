@@ -74,8 +74,6 @@ pub fn attribute(element: &CFType, name: &str) -> Result<Option<CFType>> {
         status = AXUIElementCopyAttributeValue(raw(element), CFString::new(name).as_concrete_TypeRef(), out);
         status
     })?;
-    // Some native text controls omit AXValue when empty. Only an explicit zero
-    // character count can establish an empty draft; missing data cannot.
     if name == "AXValue" && status == kAXErrorNoValue {
         let text = |key| -> Result<String> {
             Ok(attribute(element, key)?.and_then(|v| v.downcast::<CFString>()).map(|v| v.to_string()).unwrap_or_default())
@@ -101,8 +99,6 @@ pub fn names(element: &CFType, actions: bool) -> Result<Vec<String>> {
     };
     let mut value = ptr::null();
     let status = unsafe { copy(raw(element), &mut value) };
-    // AppKit's virtual Touch Bar container returns failure instead of an empty action list.
-    // Only normalize this role/error pair; permission, stale-element and IPC failures stay errors.
     let empty_touch_bar = actions
         && status == kAXErrorFailure
         && attribute(element, "AXRole")?.as_ref().and_then(json_value).as_ref().and_then(Value::as_str)

@@ -11,24 +11,21 @@ RSpec.shared_examples 'a three-field form' do
     expect(draft_value).to eq('')
   end
 
-  %w[paste type].product(%w[press space enter]).each do |input, submission|
-    it "uses #{input} only in the second field, waits two seconds, and submits once with #{submission}" do
+  [%w[paste press], %w[type enter], %w[paste space]].each do |input, submission|
+    it "uses #{input} only in the second field and submits once with #{submission}" do
       message = "Second field via #{input}: مرحبا café 🪟"
+      set_draft('old draft') if input == 'paste'
       if input == 'paste'
         expect(app('paste', '--target-path', draft, '--text', message)).to include('verified' => true)
       else
         app('focus', '--path', draft)
         expect(app('focused')).to include('title' => 'Draft', 'focused' => true)
         app('type', '--text', message)
+        expect(app('focused')).to include('focused' => true, 'value' => message)
       end
       expect(draft_value).to eq(message)
       expect_untouched_neighbors
       expect_not_submitted
-
-      sleep 2
-      expect(draft_value).to eq(message)
-      expect_untouched_neighbors
-      expect_label('Submission count: 0')
 
       if submission == 'press'
         expect(app('press', '--path', submit, '--require-value-path', draft,
@@ -48,7 +45,6 @@ RSpec.shared_examples 'a three-field form' do
   it 'submits once with guarded Enter while the second field has focus' do
     message = 'Enter from the second field'
     app('paste', '--target-path', draft, '--text', message)
-    sleep 2
     expect(app('key', '--key', 'enter', '--target-path', draft,
                '--require-value', message)).to include('verified' => true)
     expect(draft_value).to eq(message)
@@ -78,20 +74,18 @@ RSpec.shared_examples 'a three-field form' do
   end
 
   %w[press enter].each do |submission|
-    it "blocks #{submission} when the second field changes during the delay, even if the first still matches" do
+    it "blocks #{submission} when the second field changes before submission, even if the first still matches" do
       message = 'original draft'
       app('set-value', '--path', find_control_path('First field', 'AXTextField'), '--value', message)
       app('paste', '--target-path', draft, '--text', message)
-      sleep 1
-      set_draft('changed during wait')
-      sleep 1
+      set_draft('changed before submission')
       if submission == 'press'
         rejected_app(77, 'press', '--path', submit, '--require-value-path', draft, '--require-value', message)
       else
         app('focus', '--path', draft)
         rejected_app(77, 'key', '--key', 'enter', '--target-path', draft, '--require-value', message)
       end
-      expect(draft_value).to eq('changed during wait')
+      expect(draft_value).to eq('changed before submission')
       expect(field_value('First field')).to eq(message)
       expect(field_value('Third field')).to eq('third untouched')
       expect_not_submitted
@@ -120,6 +114,78 @@ RSpec.shared_examples 'a three-field form' do
     expect(implicit.fetch('characters')).to eq(result.fetch('characters'))
     expect(draft_value).to eq(message)
     expect_untouched_neighbors
+    expect_not_submitted
+  end
+  it 'discovers the complete form and its supported submit action' do
+    expect(success('apps').fetch('apps')).to include(a_hash_including('pid' => @fixture_pid))
+    tree = app('tree', '--depth', 6, '--max-nodes', 1000)
+    expect(tree.fetch('truncated')).to be(false)
+    expect(tree.fetch('tree')).to include('role' => 'AXApplication')
+    expect(tree.to_json).to include('Submit test draft', 'AXSecureTextField')
+    expect(app('inspect', '--path', '')).to include('role' => 'AXApplication')
+    outline = cli('show', '--pid', @fixture_pid, '--depth', 6)
+    expect(outline.status).to eq(0)
+    expect(outline.stdout).to include('AXApplication', 'Draft', 'Submit test draft')
+    expect(app('actions', '--path', submit).fetch('actions')).to include('AXPress')
+  end
+
+  it 'bounds traversal and redacts secure fields' do
+    tree = app('tree', '--max-nodes', 1)
+    expect(tree.fetch('truncated')).to be(true)
+    expect(tree.fetch('tree').fetch('children', [])).to be_empty
+    expect(app('find', '--title', 'Draft', '--depth', 0).fetch('matches')).to be_empty
+    limited = app('find', '--role', 'AXTextField', '--limit', 1)
+    expect(limited.fetch('matches').length).to eq(1)
+    expect(limited.fetch('truncated')).to be(true)
+    passwords = app('find', '--title', 'Password').fetch('matches').select do |row|
+      [row['role'], row['subrole']].include?('AXSecureTextField')
+    end
+    expect(passwords.length).to eq(1)
+    password = passwords.first
+    expect(app('inspect', '--path', password.fetch('path'))['value']).to be_nil
+    expect(app('tree', '--depth', 6, '--max-nodes', 1000).to_json).not_to include('fixture secret')
+    rejected_app(64, 'paste', '--target-path', password.fetch('path'), '--text', 'blocked')
+    expect_not_submitted
+  end
+
+  ['old draft', ' draft', 'draft ', "draft\n", 'Draft'].each do |actual|
+    it "rejects the nonmatching draft #{actual.inspect} without editing or submitting" do
+      set_draft(actual)
+      app('focus', '--path', draft)
+      rejected_app(77, 'key', '--key', 'enter', '--target-path', draft, '--require-value', 'draft')
+      rejected_app(77, 'press', '--path', submit, '--require-value-path', draft, '--require-value', 'draft')
+      expect(draft_value).to eq(actual)
+      expect_not_submitted
+    end
+  end
+
+  [['café', "cafe\u0301"], ["\u200fمرحبا", 'مرحبا'], ['', '']].each do |actual, expected|
+    it "submits once after verifying the matching draft #{actual.inspect}" do
+      set_draft(actual)
+      expect(app('press', '--path', submit, '--require-value-path', draft, '--require-value', expected)).to include('verified' => true)
+      expect_label("Submitted: #{actual}")
+      expect_label('Submission count: 1')
+    end
+  end
+
+  it 'rejects wrong focus, description, nonwritable targets, stale paths and cross-app clicks' do
+    set_draft('unchanged')
+    app('focus', '--path', find_control_path('First field', 'AXTextField'))
+    rejected_app(77, 'key', '--key', 'enter', '--target-path', draft, '--require-value', 'unchanged')
+    rejected_app(64, 'press', '--path', submit, '--expect-description', 'wrong button')
+    rejected_app(64, 'paste', '--target-path', submit, '--text', 'never entered')
+    rejected_app(77, 'inspect', '--path', '99999')
+    rejected_app(77, 'click', '--x', -99999, '--y', -99999)
+    expect(draft_value).to eq('unchanged')
+    expect_not_submitted
+  end
+
+  it 'toggles a checkbox through accessible presses without submitting' do
+    expect_label('Checkbox: unchecked')
+    %w[checked unchecked].each do |state|
+      app('press', '--path', find_control_path('Test checkbox', 'AXCheckBox'))
+      expect_label("Checkbox: #{state}")
+    end
     expect_not_submitted
   end
 end

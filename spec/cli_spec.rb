@@ -78,6 +78,12 @@ RSpec.describe 'The public CLI' do
     end
   end
 
+  ['-1', '1..2', '1.', 'a', '2147483648', '0. 1', '١', '+1', (['0'] * 65).join('.')].each do |path|
+    it "rejects malformed element path #{path.inspect} before desktop access" do
+      usage_error('focus', '--path', path)
+    end
+  end
+
   %w[-1 65 2147483648 x].each do |depth|
     it "rejects invalid tree depth #{depth}" do
       usage_error('tree', '--depth', depth)
