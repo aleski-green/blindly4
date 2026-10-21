@@ -19,7 +19,15 @@ impl Node {
         Ok(node)
     }
     pub fn require_focused_draft(&self, expected: &str) -> Result<()> {
-        if self.writable()? && self.has_focus()? && self.exact_draft(expected)? && platform::foreground_pid() == self.pid() {
+        self.require_input(self.exact_draft(expected)?)
+    }
+    pub fn require_empty_draft(&self) -> Result<()> {
+        // Web editors can retain formatting whitespace after a successful clear.
+        // Only this pre-paste check treats it as empty; submission stays exact.
+        self.require_input(self.value()?.is_some_and(|value| guards::normalize(&value).trim().is_empty()))
+    }
+    fn require_input(&self, matches: bool) -> Result<()> {
+        if self.editable()? && self.has_focus()? && matches && platform::foreground_pid() == self.pid() {
             return Ok(());
         }
         Err(Error::access("Input blocked: writable target, keyboard focus, exact draft and foreground PID must all match. Do not send."))
@@ -65,11 +73,13 @@ impl Node {
         if self.secure()? { Ok(None) } else { Ok(self.property("AXValue")?.and_then(|v| v.as_str().map(str::to_owned))) }
     }
     pub fn writable(&self) -> Result<bool> {
+        Ok(self.editable()? && self.value_settable()?)
+    }
+    fn editable(&self) -> Result<bool> {
         Ok(!self.is_root()
             && !self.secure()?
             && matches!(self.role()?.as_str(), "AXTextField" | "AXTextArea" | "AXComboBox")
-            && self.property("AXEnabled")? != Some(serde_json::json!(false))
-            && self.value_settable()?)
+            && self.property("AXEnabled")? != Some(serde_json::json!(false)))
     }
     pub fn has_focus(&self) -> Result<bool> {
         Ok(self.focus_flag()? && self.same(&self.focused()?))
@@ -97,11 +107,12 @@ impl Node {
         if self.secure()? {
             return Ok(false);
         }
-        // A readable value is authoritative; descendants cannot override a mismatch.
-        if let Some(actual) = self.value()? {
-            return Ok(guards::exact(&actual, expected));
+        if self.value()?.is_some_and(|actual| guards::exact(&actual, expected)) {
+            return Ok(true);
         }
-        if !platform::DESCENDANT_DRAFT {
+        // Swift also reads rich-text descendants in the writer's own subtree.
+        // Empty labels must never stand in for an unreadable empty draft.
+        if !platform::DESCENDANT_DRAFT || expected.is_empty() {
             return Ok(false);
         }
         let mut stack = vec![(self.clone(), 4)];

@@ -30,10 +30,18 @@ RSpec.describe 'A native macOS form', :macos, :live do
     outline = cli('show', '--pid', @fixture_pid, '--depth', 2)
     expect(outline.status).to eq(0)
     expect(outline.stdout).to include('AXFunctionRowTopLevelElement')
-    rejected_app(64, 'press', '--path', path)
+    rejected_app(77, 'press', '--path', path)
     expect(app('actions', '--path', submit).fetch('actions')).to include('AXPress')
     expect(draft_value).to eq('')
     expect_untouched_neighbors
+    expect_not_submitted
+  end
+
+  it 'discovers unavailable action metadata without requiring a special role', discovery_role: 'AXGroup' do
+    row = find_control('Unavailable actions', 'AXGroup')
+    expect(row.fetch('actions')).to eq([])
+    expect(app('tree', '--depth', 6, '--max-nodes', 1000).to_json).to include('Submit test draft')
+    rejected_app(77, 'press', '--path', row.fetch('path'))
     expect_not_submitted
   end
 

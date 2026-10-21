@@ -130,42 +130,35 @@ pub fn paste(i: &Invocation) -> Result<()> {
     let path = i.optional("target-path");
     let pid = i.pid()?;
     let root = Node::application(pid)?;
-    let initial = path.map(|p| root.resolve(p)).transpose()?;
-    if let Some(node) = &initial {
+    let target = path.map(|p| root.resolve(p)).transpose()?;
+    if let Some(node) = &target {
         if !node.writable()? {
             return Err(Error::usage("Paste target is not a writable text control"));
         }
     }
     let mut clipboard = Clipboard::capture()?;
     crate::application::activate(pid)?;
-    // Re-resolve after activation; reject path changes instead of editing a new control.
-    let resolve = || -> Result<Option<Node>> {
-        let current = path.map(|p| root.resolve(p)).transpose()?;
-        if let (Some(first), Some(current)) = (&initial, &current) {
-            if !first.same(current) {
-                return Err(Error::access("Paste target path changed; rediscover the control"));
-            }
-        }
-        Ok(current)
-    };
-    if let Some(node) = resolve()? {
-        node.focus()?;
+    // Retain the resolved native element; sibling index changes do not replace it.
+    if let Some(node) = &target {
         node.set_value("")?;
-        node.require_focused_draft("")?;
+        node.focus_for_paste()?;
+        node.require_empty_draft()?;
     }
     clipboard.replace(text)?;
     let outcome = (|| -> Result<()> {
-        if let Some(node) = resolve()? {
-            node.require_focused_draft("")?;
+        if let Some(node) = &target {
+            node.require_empty_draft()?;
         }
         // Pasting an empty string is already complete after the verified clear.
         if !text.is_empty() || path.is_none() {
             platform::key(pid, &crate::keyboard::parse("command+v")?)?;
+        } else if let Some(node) = &target {
+            return node.require_empty_draft();
         }
         if path.is_some() {
             for _ in 0..100 {
                 platform::wait(0.01);
-                if let Some(node) = resolve()? {
+                if let Some(node) = &target {
                     if node.exact_draft(text)? && node.has_focus()? && platform::foreground_pid() == pid {
                         return Ok(());
                     }

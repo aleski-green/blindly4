@@ -137,7 +137,9 @@ pub fn run() -> Result<()> {
     let view = window.contentView().ok_or_else(|| Error::unexpected("Fixture has no content view"))?;
     let function_row: Retained<FunctionRow> = unsafe { msg_send![FunctionRow::alloc(mtm), initWithFrame: rect(0.0, 0.0, 20.0, 20.0)] };
     function_row.setAccessibilityElement(true);
-    function_row.setAccessibilityRole(Some(&NSString::from_str("AXFunctionRowTopLevelElement")));
+    let role = std::env::var("BLINDLY4_FIXTURE_ROLE").unwrap_or_else(|_| "AXFunctionRowTopLevelElement".into());
+    function_row.setAccessibilityRole(Some(&NSString::from_str(&role)));
+    function_row.setAccessibilityTitle(Some(&NSString::from_str("Unavailable actions")));
     view.addSubview(&function_row);
     label(&view, "Fixture ready", 680.0, mtm);
     text_field(&view, "First field", "first untouched", 640.0, mtm);

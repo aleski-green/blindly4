@@ -6,6 +6,7 @@ module DesktopFixture
 
     metadata = RSpec.current_example.metadata
     @fixture_pid = Process.spawn({ 'BLINDLY4_FIXTURE_VALUE' => metadata[:value_mode],
+                                  'BLINDLY4_FIXTURE_ROLE' => metadata[:discovery_role],
                                   'BLINDLY4_FIXTURE_PASTE' => metadata[:paste_mode],
                                   'BLINDLY4_FIXTURE_CHILD' => metadata[:child_process] ? '1' : nil,
                                   'BLINDLY4_FIXTURE_BACKGROUND' => metadata[:background_start] ? '1' : nil },

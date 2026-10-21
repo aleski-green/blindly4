@@ -17,9 +17,9 @@ Invoke directly: `blindly4 schema` lists options, risks and permissions; `--help
 
 ## Safe operation
 
-On Windows, `pid` identifies the application window owner. A cross-process UI Automation provider must have native window ownership by that PID, or a reciprocal UIA hosting link from its visible native root to a visible host window owned by that PID. Hosted WebViews are validated against a freshly resolved host HWND and its first accessibility child; process ancestry alone is insufficient. Target the host PID, not the WebView process. Foreground, path identity and draft guards still apply.
+On Windows, `pid` identifies a native window owner, as in the original C# CLI. UI Automation's composed tree can include providers from other processes; those controls remain discoverable and actionable. A popup/fragment with a different reverse parent ends sibling traversal at that branch instead of aborting discovery. Foreground and pointer checks use Win32's actual window PID. If an app exposes a separate top-level WebView window, target that window's PID from `apps` for keyboard input; do not assume its outer host owns the foreground window.
 
-Foreground and pointer checks resolve that same verified hosting link, so focusing a hosted WebView does not change its application identity. Inconsistent accessibility parent links still fail closed; use bounded `find --limit` queries for the intended control.
+macOS discovery tolerates unavailable optional AX properties and action lists, as Swift did. Native action/write failures still return errors. Rich-text draft verification reads only the selected writer's own subtree.
 
 - Serialize whole workflows across apps; input, focus and clipboard are shared. Keep Sapiens4 host ownership; standalone callers supply coordination.
 - Input needs `--pid`. Verify app/recipient/writable child; rediscover paths before mutation. Never invent changing child indexes or infer writability from focus. Use `--require-selected` for selectable press targets.
@@ -30,7 +30,7 @@ blindly4 paste --pid PID --target-path COMPOSER --text TEXT
 blindly4 press --pid PID --path SEND --expect-description Send --require-value-path COMPOSER --require-value TEXT
 ```
 
-Guarded paste clears/verifies the target draft, allowing Unicode normalization/direction handling and up to one second before clipboard restoration. Guarded keys require PID, nonempty target/draft, matching focus/foreground app. Missing exact text fails closed. Reuse paste verification, but refresh send guards and inspect outcomes: `verified`, injected keys or empty composers do not prove delivery.
+Guarded paste retains the resolved native control while clearing, focusing and verifying it; changing sibling indexes cannot retarget it. Formatting whitespace after clear is accepted as empty, while nonempty draft verification remains exact with Unicode normalization/direction handling. macOS paste focuses by clicking the writer's live bounds, as Swift did. Clipboard restoration waits up to one second for verification. Guarded keys require PID, nonempty target/draft, matching focus/foreground app; keyboard input does not require a native value-setter capability. Missing exact text fails closed. Refresh send guards and inspect outcomes: `verified`, injected keys or empty composers do not prove delivery.
 
 Stop on errors. Confirmed *pre-input* nonwritable rejection permits one rediscovery/inspection and guarded-paste retry; missing focus permits one rediscovery/refocus. Never bypass draft/focus/send guards. Exit codes cannot prove absence of input; inspect uncertain input/submission before retrying. An app consuming paste only after clipboard restoration can insert the restored clipboard text even after the command reports failure; a timeout is not a rollback.
 

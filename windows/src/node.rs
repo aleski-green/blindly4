@@ -2,10 +2,6 @@
 use super::native;
 use crate::error::{Error, Result};
 use serde_json::{Value, json};
-use windows::Win32::{
-    Foundation::HWND,
-    UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, IsWindowVisible},
-};
 use windows::{
     Win32::{System::Com::*, UI::Accessibility::*},
     core::{BSTR, Interface},
@@ -31,82 +27,11 @@ impl Node {
         Self::root(pid)
     }
     pub fn focused(&self) -> Result<Self> {
-        self.with_application_element(unsafe { self.automation.GetFocusedElement()? })
+        Ok(self.child(unsafe { self.automation.GetFocusedElement()? }))
     }
-    pub fn window_application_pid(window: HWND) -> i32 {
-        let pid = native::window_pid(window);
-        let host = (|| -> Result<Option<i32>> {
-            let node = Self::root(pid)?;
-            unsafe { node.fragment_host(&node.automation.RawViewWalker()?, &node.automation.ElementFromHandle(window)?) }
-        })();
-        host.ok().flatten().unwrap_or(pid)
-    }
-    fn require_application_element(&self, element: &IUIAutomationElement) -> Result<()> {
-        let observed_pid = unsafe { element.CurrentProcessId()? };
-        if observed_pid == self.pid {
-            return Ok(());
-        }
-        // Chromium providers may use another PID. Require native ownership or a
-        // reciprocal UIA hosting link at the first HWND, never process ancestry.
-        let walker = unsafe { self.automation.RawViewWalker()? };
-        let mut current = element.clone();
-        for _ in 0..128 {
-            let handle = unsafe { current.CurrentNativeWindowHandle()? };
-            if !handle.0.is_null() {
-                let root = unsafe { GetAncestor(handle, GA_ROOT) };
-                if !root.0.is_null() && native::window_pid(root) == self.pid && unsafe { IsWindowVisible(root).as_bool() } {
-                    return Ok(());
-                }
-                if !root.0.is_null()
-                    && unsafe { IsWindowVisible(root).as_bool() }
-                    && self.fragment_host(&walker, &unsafe { self.automation.ElementFromHandle(root)? })? == Some(self.pid)
-                {
-                    return Ok(());
-                }
-                break;
-            }
-            let Some(parent) = nullable_uia_element(unsafe { walker.GetParentElement(&current) })? else { break };
-            if unsafe { self.automation.CompareElements(&current, &parent)?.as_bool() } {
-                break;
-            }
-            current = parent;
-        }
-        Err(Error::access(format!(
-            "Target belongs to a different application (expected window PID {}, provider PID {observed_pid}); rediscover the target",
-            self.pid
-        )))
-    }
-    fn fragment_host(&self, walker: &IUIAutomationTreeWalker, fragment: &IUIAutomationElement) -> Result<Option<i32>> {
-        // Composition WebViews can be native top-level windows hosted in another
-        // process's UIA tree. Verify the host from its HWND, not just an upward link.
-        unsafe {
-            let Some(parent) = nullable_uia_element(walker.GetParentElement(fragment))? else { return Ok(None) };
-            let handle = parent.CurrentNativeWindowHandle()?;
-            let root = GetAncestor(handle, GA_ROOT);
-            let pid = native::window_pid(handle);
-            if handle.0.is_null()
-                || root.0.is_null()
-                || pid <= 0
-                || native::window_pid(root) != pid
-                || !IsWindowVisible(handle).as_bool()
-                || !IsWindowVisible(root).as_bool()
-            {
-                return Ok(None);
-            }
-            let host = self.automation.ElementFromHandle(handle)?;
-            if !self.automation.CompareElements(&parent, &host)?.as_bool() {
-                return Ok(None);
-            }
-            let Some(child) = nullable_uia_element(walker.GetFirstChildElement(&host))? else { return Ok(None) };
-            let Some(current_parent) = nullable_uia_element(walker.GetParentElement(&child))? else { return Ok(None) };
-            Ok((self.automation.CompareElements(&child, fragment)?.as_bool()
-                && self.automation.CompareElements(&current_parent, &host)?.as_bool())
-            .then_some(pid))
-        }
-    }
-    fn with_application_element(&self, element: IUIAutomationElement) -> Result<Self> {
-        self.require_application_element(&element)?;
-        Ok(Self { element: Some(element), pid: self.pid, automation: self.automation.clone() })
+    fn child(&self, element: IUIAutomationElement) -> Self {
+        // UIA supplies the application's composed tree, including other processes.
+        Self { element: Some(element), pid: self.pid, automation: self.automation.clone() }
     }
     fn element(&self) -> Result<&IUIAutomationElement> {
         self.element.as_ref().ok_or_else(|| Error::usage("Choose a control path"))
@@ -228,25 +153,22 @@ impl Node {
                     if children.len() == 10000 {
                         return Err(Error::access("Control has more than 10000 children; narrow the target"));
                     }
-                    let parent = nullable_uia_element(walker.GetParentElement(&current))?
-                        .ok_or_else(|| Error::access("Accessibility child lost its parent; rediscover the target"))?;
-                    let has_expected_parent = self.automation.CompareElements(e, &parent)?.as_bool();
-                    let desktop_parented_combo_popup = children.is_empty()
-                        && e.CurrentControlType()? == UIA_ComboBoxControlTypeId
-                        && current.CurrentControlType()? == UIA_ListControlTypeId
-                        && self.automation.CompareElements(&parent, &self.automation.GetRootElement()?)?.as_bool();
-                    if !has_expected_parent && !desktop_parented_combo_popup {
-                        return Err(Error::access("Accessibility child changed parents; rediscover the target"));
+                    // A popup/fragment can point back to a different parent. Keep
+                    // that child, but do not follow its siblings out of this branch.
+                    let parent = nullable_uia_element(walker.GetParentElement(&current)).ok().flatten();
+                    let same_parent = parent.is_some_and(|parent| self.automation.CompareElements(e, &parent).is_ok_and(|v| v.as_bool()));
+                    if !children.is_empty() && !same_parent {
+                        break;
                     }
-                    children.push(self.with_application_element(current.clone())?);
-                    if desktop_parented_combo_popup {
+                    children.push(self.child(current.clone()));
+                    if !same_parent {
                         break;
                     }
                     child = nullable_uia_element(walker.GetNextSiblingElement(&current))?;
                 }
             } else {
                 for window in native::windows()?.into_iter().filter(|w| w.pid == self.pid) {
-                    children.push(self.with_application_element(self.automation.ElementFromHandle(window.handle)?)?);
+                    children.push(self.child(self.automation.ElementFromHandle(window.handle)?));
                 }
             }
         }
@@ -264,17 +186,18 @@ impl Node {
     }
 
     pub fn focus_native(&self) -> Result<()> {
-        self.require_application_element(self.element()?)?;
         unsafe {
             self.element()?.SetFocus()?;
         }
         Ok(())
     }
+    pub fn focus_for_paste(&self) -> Result<()> {
+        self.focus()
+    }
     pub fn selected_text_native(&self, text: &str) -> Result<()> {
         native::text(self.pid, text)
     }
     pub fn set_value_native(&self, text: &str) -> Result<()> {
-        self.require_application_element(self.element()?)?;
         unsafe {
             self.pattern::<IUIAutomationValuePattern>()?
                 .ok_or_else(|| Error::access("ValuePattern disappeared"))?
@@ -283,7 +206,6 @@ impl Node {
         Ok(())
     }
     pub fn perform(&self, name: &str) -> Result<()> {
-        self.require_application_element(self.element()?)?;
         if self.action(name, true)? { Ok(()) } else { Err(Error::usage(format!("Target does not support {name}"))) }
     }
 }

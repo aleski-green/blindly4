@@ -30,6 +30,21 @@ const RELEASE_PASTE: i32 = 307;
 const SWITCH_FIXTURE: i32 = 308;
 const DETACH_CHILD: i32 = 309;
 const SELECT_EDIT_TEXT_MESSAGE: u32 = 0x00b1;
+static ORIGINAL_EDIT: std::sync::OnceLock<WNDPROC> = std::sync::OnceLock::new();
+
+unsafe extern "system" fn draft_procedure(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    unsafe {
+        let original = *ORIGINAL_EDIT.get().unwrap();
+        if message == WM_SETTEXT && lparam.0 != 0 && *(lparam.0 as *const u16) == 0 {
+            let mode = std::env::var("BLINDLY4_FIXTURE_VALUE").unwrap_or_default();
+            let value = native::wide(if mode == "whitespace" { "\r\n" } else { "retained draft" });
+            let result = CallWindowProcW(original, window, message, wparam, LPARAM(value.as_ptr() as isize));
+            SendMessageW(window, SELECT_EDIT_TEXT_MESSAGE, Some(WPARAM(0)), Some(LPARAM(-1)));
+            return result;
+        }
+        CallWindowProcW(original, window, message, wparam, lparam)
+    }
+}
 
 unsafe fn release_paste(window: HWND) {
     unsafe {
@@ -203,6 +218,10 @@ pub fn run() -> Result<()> {
         let first = create_text_field("First field", "first untouched", [109, FIRST], 35, WINDOW_STYLE::default())?;
         let draft_title = if host.is_some() { "Child process draft" } else { "Draft" };
         let draft = create_text_field(draft_title, "", [104, DRAFT], 90, WINDOW_STYLE(ES_AUTOHSCROLL as u32))?;
+        if live && std::env::var_os("BLINDLY4_FIXTURE_VALUE").is_some() {
+            let original = SetWindowLongPtrW(draft, GWLP_WNDPROC, draft_procedure as *const () as isize);
+            let _ = ORIGINAL_EDIT.set(std::mem::transmute::<isize, WNDPROC>(original));
+        }
         let third = create_text_field("Third field", "third untouched", [111, THIRD], 195, WINDOW_STYLE::default())?;
         create_control(w!("BUTTON"), "Submit test draft", WS_TABSTOP | WINDOW_STYLE(BS_DEFPUSHBUTTON as u32), [20, 255, 180, 32], SUBMIT)?;
         create_control(w!("BUTTON"), "Test checkbox", WS_TABSTOP | WINDOW_STYLE(BS_AUTOCHECKBOX as u32), [215, 255, 195, 32], CHECKBOX)?;
@@ -297,6 +316,9 @@ pub fn run() -> Result<()> {
                 } else if paste_mode == "focus-after" {
                     release_paste(window);
                     let _ = SetFocus(Some(first));
+                } else if paste_mode == "reorder" {
+                    release_paste(window);
+                    SetWindowPos(third, Some(HWND_TOP), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)?;
                 }
                 continue;
             }

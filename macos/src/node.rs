@@ -23,9 +23,6 @@ impl Node {
     }
     fn child(&self, element: CFType) -> Result<Self> {
         let element = ax::element(element)?;
-        if ax::pid(&element)? != self.pid {
-            return Err(Error::access("Accessibility target changed process; rediscover it"));
-        }
         Ok(Self { element, pid: self.pid, root: false })
     }
     pub fn same(&self, other: &Self) -> bool {
@@ -96,6 +93,15 @@ impl Node {
     pub fn focus_native(&self) -> Result<()> {
         ax::set(&self.element, "AXFocused", &CFBoolean::true_value())
     }
+    pub fn focus_for_paste(&self) -> Result<()> {
+        let position = self.property("AXPosition")?.ok_or_else(|| Error::access("Paste target has no screen position"))?;
+        let size = self.property("AXSize")?.ok_or_else(|| Error::access("Paste target has no screen size"))?;
+        let (x, y, width, height) = (position["x"].as_f64(), position["y"].as_f64(), size["width"].as_f64(), size["height"].as_f64());
+        match (x, y, width, height) {
+            (Some(x), Some(y), Some(w), Some(h)) if w > 0.0 && h > 0.0 => native::click(self.pid, x + w / 2.0, y + h / 2.0),
+            _ => Err(Error::access("Paste target has no usable on-screen bounds")),
+        }
+    }
     pub fn set_value_native(&self, text: &str) -> Result<()> {
         ax::set(&self.element, "AXValue", &CFString::new(text))
     }
@@ -104,7 +110,7 @@ impl Node {
     }
     pub fn perform(&self, name: &str) -> Result<()> {
         self.check_control()?;
-        if !self.actions()?.iter().any(|action| action == name) {
+        if name != "AXPress" && !self.actions()?.iter().any(|action| action == name) {
             return Err(Error::usage(format!("Target does not support {name}")));
         }
         ax::action(&self.element, name)

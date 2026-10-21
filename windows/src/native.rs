@@ -32,9 +32,7 @@ pub fn window_pid(handle: HWND) -> i32 {
     pid as i32
 }
 pub fn foreground_pid() -> i32 {
-    let window = unsafe { GetForegroundWindow() };
-    let pid = super::node::Node::window_application_pid(window);
-    if unsafe { GetForegroundWindow() } == window { pid } else { 0 }
+    window_pid(unsafe { GetForegroundWindow() })
 }
 pub fn windows() -> Result<Vec<Window>> {
     unsafe extern "system" fn collect_visible_window(handle: HWND, windows_pointer: LPARAM) -> BOOL {
@@ -97,7 +95,7 @@ pub fn activate_native(pid: i32) -> Result<()> {
 }
 pub fn require_point(pid: i32, x: i32, y: i32) -> Result<()> {
     let handle = unsafe { GetAncestor(WindowFromPoint(POINT { x, y }), GA_ROOT) };
-    if super::node::Node::window_application_pid(handle) != pid {
+    if window_pid(handle) != pid {
         return Err(Error::access("Input blocked: the screen point belongs to a different application"));
     }
     Ok(())

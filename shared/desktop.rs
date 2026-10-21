@@ -52,13 +52,7 @@ fn walk_bounded_depth_first(root: Node, depth: i32, mut visit: impl FnMut(&Node,
 pub fn show(i: &Invocation) -> Result<()> {
     let depth = i.integer("depth", 4, 0, 64)?;
     let truncated = walk_bounded_depth_first(Node::application(i.pid()?)?, depth, |node, path| {
-        let row = node.detail(None)?;
-        println!(
-            "{path:<18} {} {} {}",
-            row["role"].as_str().unwrap_or(""),
-            row["title"].as_str().unwrap_or(""),
-            row["value"].as_str().unwrap_or("")
-        );
+        println!("{path:<18} {} {} {}", node.role()?, node.text("AXTitle")?, node.text("AXValue")?);
         Ok(true)
     })?;
     if truncated {
@@ -67,8 +61,10 @@ pub fn show(i: &Invocation) -> Result<()> {
     Ok(())
 }
 pub fn find(i: &Invocation) -> Result<()> {
-    let filters: Vec<_> =
-        ["title", "role", "value", "description"].into_iter().filter_map(|k| i.optional(k).map(|v| (k, v.to_lowercase()))).collect();
+    let filters: Vec<_> = [("title", "AXTitle"), ("role", "AXRole"), ("value", "AXValue"), ("description", "AXDescription")]
+        .into_iter()
+        .filter_map(|(key, attribute)| i.optional(key).map(|value| (attribute, value.to_lowercase())))
+        .collect();
     if filters.is_empty() {
         return Err(Error::usage("find requires --title, --role, --value or --description"));
     }
@@ -76,13 +72,15 @@ pub fn find(i: &Invocation) -> Result<()> {
     let depth = i.integer("depth", 8, 0, 64)?;
     let mut matches = vec![];
     let truncated = walk_bounded_depth_first(Node::application(i.pid()?)?, depth, |node, path| {
-        let row = node.detail(Some(path))?;
-        if filters.iter().all(|(k, v)| {
-            let actual = row[*k].as_str().unwrap_or("");
-            if *k == "role" { platform::role_matches(actual, v) } else { actual.to_lowercase().contains(v) }
-        }) {
-            matches.push(row);
+        // Read only requested properties; unrelated action metadata cannot abort a search.
+        for (attribute, expected) in &filters {
+            let actual = node.text(attribute)?;
+            if !(if *attribute == "AXRole" { platform::role_matches(&actual, expected) } else { actual.to_lowercase().contains(expected) })
+            {
+                return Ok(true);
+            }
         }
+        matches.push(node.detail(Some(path))?);
         Ok(matches.len() < limit)
     })?;
     crate::json(&json!({"matches": matches, "truncated": truncated}))
@@ -108,7 +106,7 @@ pub fn press(i: &Invocation) -> Result<()> {
     let path = i.value("path")?;
     let target = root.resolve(path)?;
     if let Some(expected) = i.optional("expect-description") {
-        if !target.detail(None)?["description"].as_str().unwrap_or("").to_lowercase().contains(&expected.to_lowercase()) {
+        if !target.text("AXDescription")?.to_lowercase().contains(&expected.to_lowercase()) {
             return Err(Error::usage("press target does not match --expect-description"));
         }
     }
@@ -116,9 +114,6 @@ pub fn press(i: &Invocation) -> Result<()> {
         if !root.resolve(draft_path)?.exact_draft(i.value("require-value")?)? {
             return Err(Error::access("Press blocked: the draft does not exactly match --require-value"));
         }
-    }
-    if !target.same(&root.resolve(path)?) {
-        return Err(Error::access("Press target path changed; rediscover it"));
     }
     target.press()?;
     if i.has("require-selected") {
