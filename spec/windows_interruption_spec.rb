@@ -3,10 +3,6 @@ require 'support/desktop_fixture'
 RSpec.describe 'Windows interrupted input', :windows, :live do
   include_context 'a native desktop fixture'
 
-  def clipboard_text(text)
-    { 'CF_UNICODETEXT' => "#{text}\0".encode(Encoding::UTF_16LE).bytes }
-  end
-
   around do |example|
     with_clipboard_fixture do |clipboard|
       clipboard.call('write' => clipboard_text('interruption fixture clipboard'))
@@ -123,7 +119,7 @@ RSpec.describe 'Windows interrupted input', :windows, :live do
 
   it 'fails closed when another process takes focus during pending paste', paste_mode: 'hold' do
     other = Process.spawn({ 'BLINDLY4_FIXTURE_PASTE' => nil, 'BLINDLY4_FIXTURE_BACKGROUND' => '1' },
-                          [Blindly::BINARY, Blindly::BINARY], '--test-app', in: File::NULL, out: File::NULL, err: File::NULL)
+                          [fixture_binary, fixture_binary], '--test-app', in: File::NULL, out: File::NULL, err: File::NULL)
     wait_for_observed_state('Second fixture ready') do
       result = cli('find', '--pid', other, '--title', 'Fixture ready', '--role', 'AXStaticText')
       result.status == 0 && !result.json.fetch('matches').empty?

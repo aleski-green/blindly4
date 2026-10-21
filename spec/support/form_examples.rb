@@ -116,6 +116,7 @@ RSpec.shared_examples 'a three-field form' do
     expect_untouched_neighbors
     expect_not_submitted
   end
+
   it 'discovers the complete form and its supported submit action' do
     expect(success('apps').fetch('apps')).to include(a_hash_including('pid' => @fixture_pid))
     tree = app('tree', '--depth', 6, '--max-nodes', 1000)
@@ -191,5 +192,62 @@ RSpec.shared_examples 'a three-field form' do
       expect_label("Checkbox: #{state}")
     end
     expect_not_submitted
+  end
+
+  it 'waits for an asynchronous focus request without repeating input', value_mode: 'delayed-focus' do
+    app('press', '--path', find_control_path('Delay draft focus', 'AXButton'))
+    expect(app('focused')).to include('title' => 'First field')
+    expect(app('paste', '--target-path', draft, '--text', 'entered once')).to include('verified' => true)
+    expect(app('focused')).to include('title' => 'Draft', 'value' => 'entered once')
+    expect_not_submitted
+    expect_untouched_neighbors
+  end
+
+  it 'accepts formatting whitespace after clear without relaxing nonempty draft matching', value_mode: 'whitespace' do
+    app('set-value', '--path', draft, '--value', '')
+    expect(draft_value).to eq("\r\n")
+    expect(app('paste', '--target-path', draft, '--text', 'exact message')).to include('verified' => true)
+    expect(draft_value).to eq('exact message')
+    set_draft("exact message\r\n")
+    rejected_app(77, 'press', '--path', submit, '--require-value-path', draft, '--require-value', 'exact message')
+    expect(app('paste', '--target-path', draft, '--text', '')).to include('verified' => true)
+    expect(draft_value).to eq("\r\n")
+    expect_not_submitted
+    expect_untouched_neighbors
+  end
+
+  it 'delivers every Unicode event from successive short-lived typing processes' do
+    30.times do |index|
+      message = "#{index}: " + ('abcdefghij مرحبا café 🪟 ' * 3)
+      set_draft('')
+      app('focus', '--path', draft)
+      result = app('type', '--text', message)
+      expect(result.fetch('characters')).to eq(message.codepoints.length)
+      expect(draft_value).to eq(message)
+    end
+    expect_untouched_neighbors
+    expect_not_submitted
+  end
+
+  it 'keeps the application root readable while rejecting control mutations' do
+    set_draft('unchanged')
+    expect(app('actions', '--path', '')).to eq('path' => '', 'actions' => [])
+    %w[focus press show-menu scroll-to].each do |command|
+      rejected_app(64, command, '--path', '')
+    end
+    rejected_app(64, 'set-value', '--path', '', '--value', 'never entered')
+    rejected_app(64, 'paste', '--target-path', '', '--text', 'never entered')
+    rejected_app(64, 'key', '--key', 'enter', '--target-path', '', '--require-value', 'unchanged')
+    expect(draft_value).to eq('unchanged')
+    expect_not_submitted
+  end
+
+  it 'toggles the focused checkbox with Space without submitting' do
+    app('focus', '--path', find_control_path('Test checkbox', 'AXCheckBox'))
+    app('key', '--key', 'space')
+    expect_label('Checkbox: checked')
+    app('key', '--key', 'space')
+    expect_label('Checkbox: unchecked')
+    expect_label('Submission count: 0')
   end
 end

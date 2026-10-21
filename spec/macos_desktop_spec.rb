@@ -64,22 +64,6 @@ RSpec.describe 'A native macOS form', :macos, :live do
     expect_not_submitted
   end
 
-  it 'preserves empty and multi-item binary clipboard contents after verified paste' do
-    with_clipboard_fixture do |clipboard|
-      [[], [
-        { 'public.utf8-plain-text' => 'clipboard café'.bytes, 'org.blindly4.fixture' => [0, 255, 17, 0] },
-        { 'org.blindly4.fixture-second' => [1, 2, 3, 128] }
-      ]].each do |items|
-        original = clipboard.call('write' => items)
-        expect(original).to eq(items)
-        app('paste', '--target-path', draft, '--text', 'pasted into fixture only')
-        expect(draft_value).to eq('pasted into fixture only')
-        expect(clipboard.call({})).to eq(original)
-      end
-    end
-    expect_not_submitted
-  end
-
   it 'clicks the target field and scrolls the native scroll view in both directions' do
     field = app('inspect', '--path', draft)
     app('click', '--x', field.fetch('position').fetch('x') + 40, '--y', field.fetch('position').fetch('y') + 12)
@@ -100,18 +84,4 @@ RSpec.describe 'A native macOS form', :macos, :live do
     rejected_app(64, 'scroll-to', '--path', draft)
     expect_not_submitted
   end
-
-  it 'delivers every Unicode event from successive short-lived typing processes' do
-    10.times do |index|
-      message = "#{index}: " + ('abcdefghij مرحبا café 🪟 ' * 3)
-      set_draft('')
-      app('focus', '--path', draft)
-      result = app('type', '--text', message)
-      expect(result.fetch('characters')).to eq(message.scan(/\X/).length)
-      expect(draft_value).to eq(message)
-    end
-    expect_untouched_neighbors
-    expect_not_submitted
-  end
-
 end

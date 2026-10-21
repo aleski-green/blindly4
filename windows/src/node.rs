@@ -191,8 +191,8 @@ impl Node {
         }
         Ok(())
     }
-    pub fn focus_for_paste(&self) -> Result<()> {
-        self.focus()
+    pub fn focus_for_paste_native(&self) -> Result<()> {
+        self.focus_native()
     }
     pub fn selected_text_native(&self, text: &str) -> Result<()> {
         native::text(self.pid, text)

@@ -35,7 +35,17 @@ impl Node {
     pub fn focus(&self) -> Result<()> {
         self.check_control()?;
         crate::application::activate(self.pid())?;
-        self.focus_native()?;
+        self.focus_with(|| self.focus_native())
+    }
+    pub fn focus_for_paste(&self) -> Result<()> {
+        self.focus_with(|| self.focus_for_paste_native())
+    }
+    fn focus_with(&self, request: impl FnOnce() -> Result<()>) -> Result<()> {
+        self.check_control()?;
+        // Paste already activated the app before clearing; do not reclaim focus
+        // if another app took it in the meantime.
+        crate::application::require_foreground(self.pid())?;
+        request()?;
         for _ in 0..20 {
             if platform::foreground_pid() != self.pid() {
                 break;

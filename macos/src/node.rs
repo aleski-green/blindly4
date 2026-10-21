@@ -93,7 +93,7 @@ impl Node {
     pub fn focus_native(&self) -> Result<()> {
         ax::set(&self.element, "AXFocused", &CFBoolean::true_value())
     }
-    pub fn focus_for_paste(&self) -> Result<()> {
+    pub fn focus_for_paste_native(&self) -> Result<()> {
         let position = self.property("AXPosition")?.ok_or_else(|| Error::access("Paste target has no screen position"))?;
         let size = self.property("AXSize")?.ok_or_else(|| Error::access("Paste target has no screen size"))?;
         let (x, y, width, height) = (position["x"].as_f64(), position["y"].as_f64(), size["width"].as_f64(), size["height"].as_f64());

@@ -43,9 +43,6 @@ fn snapshot(owner: HWND, supplied: &BTreeMap<String, u32>) -> Result<(Value, u32
 }
 
 pub fn run() -> Result<()> {
-    if std::env::var("BLINDLY4_LIVE").as_deref() != Ok("1") {
-        return Err(Error::usage("Clipboard fixture requires BLINDLY4_LIVE=1"));
-    }
     // Save user data privately. Only RSpec-supplied format bytes go to stdout.
     let mut original = Clipboard::capture()?;
     let mut supplied = BTreeMap::new();

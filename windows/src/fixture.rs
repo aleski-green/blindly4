@@ -173,10 +173,9 @@ unsafe extern "system" fn procedure(window: HWND, message: u32, wparam: WPARAM, 
 }
 pub fn run() -> Result<()> {
     native::dpi_awareness();
-    let live = std::env::var("BLINDLY4_LIVE").as_deref() == Ok("1");
-    let background = live && std::env::var("BLINDLY4_FIXTURE_BACKGROUND").as_deref() == Ok("1");
-    let paste_mode = if live { std::env::var("BLINDLY4_FIXTURE_PASTE").unwrap_or_default() } else { String::new() };
-    let host_pid = if live { std::env::var("BLINDLY4_FIXTURE_HOST_PID").ok().and_then(|p| p.parse::<i32>().ok()) } else { None };
+    let background = std::env::var("BLINDLY4_FIXTURE_BACKGROUND").as_deref() == Ok("1");
+    let paste_mode = std::env::var("BLINDLY4_FIXTURE_PASTE").unwrap_or_default();
+    let host_pid = std::env::var("BLINDLY4_FIXTURE_HOST_PID").ok().and_then(|p| p.parse::<i32>().ok());
     let host = match host_pid {
         Some(pid) => Some(
             native::windows()?
@@ -238,7 +237,7 @@ pub fn run() -> Result<()> {
         let first = create_text_field("First field", "first untouched", [109, FIRST], 35, WINDOW_STYLE::default())?;
         let draft_title = if host.is_some() { "Child process draft" } else { "Draft" };
         let draft = create_text_field(draft_title, "", [104, DRAFT], 90, WINDOW_STYLE(ES_AUTOHSCROLL as u32))?;
-        if live && std::env::var_os("BLINDLY4_FIXTURE_VALUE").is_some() {
+        if std::env::var_os("BLINDLY4_FIXTURE_VALUE").is_some() {
             let original = SetWindowLongPtrW(draft, GWLP_WNDPROC, draft_procedure as *const () as isize);
             let _ = ORIGINAL_EDIT.set(std::mem::transmute::<isize, WNDPROC>(original));
             create_control(w!("BUTTON"), "Delay draft focus", WS_TABSTOP, [20, 575, 180, 28], DELAY_FOCUS)?;
@@ -291,7 +290,7 @@ pub fn run() -> Result<()> {
         if host.is_some() {
             create_control(w!("BUTTON"), "Detach child window", WS_TABSTOP, [445, 580, 250, 28], DETACH_CHILD)?;
         }
-        let mut child_process = if live && std::env::var("BLINDLY4_FIXTURE_CHILD").as_deref() == Ok("1") && host.is_none() {
+        let mut child_process = if std::env::var("BLINDLY4_FIXTURE_CHILD").as_deref() == Ok("1") && host.is_none() {
             let child = std::process::Command::new(std::env::current_exe()?)
                 .arg("--test-app")
                 .env("BLINDLY4_FIXTURE_HOST_PID", std::process::id().to_string())

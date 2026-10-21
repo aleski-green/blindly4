@@ -26,7 +26,7 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
     "NSApplication", "NSRunningApplication", "NSWorkspace", "NSPasteboard", "NSPasteboardItem",
     "NSResponder", "NSView", "NSWindow", "NSGraphics", "NSControl", "NSCell", "NSActionCell",
     "NSButton", "NSButtonCell", "NSTextField", "NSTextFieldCell", "NSSecureTextField",
-    "NSMenu", "NSMenuItem", "NSPopUpButton", "NSPopUpButtonCell", "NSScrollView", "NSClipView",
+    "NSMenu", "NSMenuItem", "NSPopUpButton", "NSPopUpButtonCell", "NSScrollView", "NSClipView", "NSEvent",
 ] }
 
 [profile.release]

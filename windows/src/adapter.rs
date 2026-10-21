@@ -10,6 +10,8 @@ use crate::{
     registry::Command,
 };
 pub use clipboard::Clipboard;
+pub use clipboard::fixture::run as clipboard_fixture;
+pub use fixture::run as desktop_fixture;
 pub use native::{
     Key, PERMISSION_SUMMARY, SCHEMA_SUMMARY, VALUE_SUMMARY, activate_native, activation_pid, apps, click, foreground_pid, key, key_code,
     open_url, request_permission, schema, scroll, text, wait,
@@ -44,15 +46,6 @@ pub fn prepare(command: &Command, invocation: &Invocation) -> Result<ComApartmen
     }
     input::validate(command, invocation)?;
     Ok(session)
-}
-pub fn fixture(args: &[String]) -> Option<Result<()>> {
-    if args == ["--test-app"] {
-        Some(fixture::run())
-    } else if args == ["--test-pasteboard"] {
-        Some(clipboard::fixture::run())
-    } else {
-        None
-    }
 }
 pub fn help_requested(args: &[String], global: bool) -> bool {
     args == ["--help"] || (global && args == ["help"])

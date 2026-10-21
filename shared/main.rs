@@ -2,6 +2,7 @@ mod application;
 mod desktop;
 mod element;
 mod error;
+mod fixture;
 mod guards;
 mod input;
 mod invocation;
@@ -40,7 +41,7 @@ fn main() {
     let result = platform::with_runtime(|| {
         let start = Instant::now();
         let mut args: Vec<String> = std::env::args().skip(1).collect();
-        if let Some(result) = platform::fixture(&args) {
+        if let Some(result) = fixture::run(&args) {
             return result;
         }
         let profile = args.iter().any(|arg| arg == "--profile");

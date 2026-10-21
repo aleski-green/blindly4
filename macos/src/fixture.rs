@@ -1,11 +1,52 @@
 use crate::error::{Error, Result};
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, rc::Retained, sel};
 use objc2_app_kit::{
-    NSAccessibility, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSButton, NSMenu, NSMenuItem, NSPopUpButton,
-    NSScrollView, NSSecureTextField, NSTextField, NSView, NSWindow, NSWindowStyleMask,
+    NSAccessibility, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSButton, NSEvent, NSEventType, NSMenu, NSMenuItem,
+    NSPopUpButton, NSScrollView, NSSecureTextField, NSTextField, NSView, NSWindow, NSWindowStyleMask,
 };
-use objc2_foundation::{MainThreadMarker, NSArray, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
+use objc2_foundation::{
+    MainThreadMarker, NSArray, NSObject, NSObjectNSDelayedPerforming, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
+};
 use std::cell::Cell;
+
+thread_local! { static FOCUS_PENDING: Cell<u8> = const { Cell::new(0) }; }
+
+define_class!(
+    #[unsafe(super = NSWindow)]
+    #[thread_kind = MainThreadOnly]
+    struct FixtureWindow;
+    unsafe impl NSObjectProtocol for FixtureWindow {}
+    impl FixtureWindow {
+        #[unsafe(method(sendEvent:))]
+        fn send_event(&self, event: &NSEvent) {
+            if event.r#type() == NSEventType::LeftMouseDown && FOCUS_PENDING.with(|pending| pending.get() == 1) {
+                FOCUS_PENDING.with(|pending| pending.set(2));
+                self.focus_field("First field");
+                unsafe { self.performSelector_withObject_afterDelay(sel!(finishFocus:), None, 0.15); }
+            } else if event.r#type() == NSEventType::LeftMouseUp && FOCUS_PENDING.with(|pending| pending.get() == 2) {
+                // The delayed native click handler has not focused the editor yet.
+            } else {
+                unsafe { let _: () = msg_send![super(self), sendEvent: event]; }
+            }
+        }
+        #[unsafe(method(finishFocus:))]
+        fn finish_focus(&self, _sender: Option<&NSObject>) {
+            FOCUS_PENDING.with(|pending| pending.set(0));
+            self.focus_field("Draft");
+        }
+    }
+);
+impl FixtureWindow {
+    fn focus_field(&self, title: &str) {
+        if let Some(view) = self.contentView() {
+            for field in view.subviews() {
+                if field.accessibilityTitle().is_some_and(|value| value.to_string() == title) {
+                    self.makeFirstResponder(Some(&field));
+                }
+            }
+        }
+    }
+}
 
 define_class!(
     #[unsafe(super = NSTextField)]
@@ -16,7 +57,12 @@ define_class!(
         #[unsafe(method(accessibilityValue))]
         fn ax_value(&self) -> *mut NSString {
             let value = self.stringValue();
-            if value.is_empty() || std::env::var("BLINDLY4_FIXTURE_VALUE").as_deref() != Ok("empty") { std::ptr::null_mut() } else { Retained::autorelease_ptr(value) }
+            match std::env::var("BLINDLY4_FIXTURE_VALUE").as_deref() {
+                Ok("empty") if value.is_empty() => std::ptr::null_mut(),
+                Ok("unreadable" | "invalid-count") => std::ptr::null_mut(),
+                Ok("whitespace") if value.is_empty() => Retained::autorelease_ptr(NSString::from_str("\r\n")),
+                _ => Retained::autorelease_ptr(value),
+            }
         }
         #[unsafe(method(accessibilityNumberOfCharacters))]
         fn character_count(&self) -> isize {
@@ -39,6 +85,7 @@ define_class!(
 );
 
 struct State {
+    first: Retained<NSTextField>,
     draft: Retained<NSTextField>,
     submitted: Retained<NSTextField>,
     count_label: Retained<NSTextField>,
@@ -53,6 +100,11 @@ define_class!(
     struct Controller;
     unsafe impl NSObjectProtocol for Controller {}
     impl Controller {
+        #[unsafe(method(delayFocus:))]
+        fn delay_focus(&self, _sender: &NSObject) {
+            if let Some(window) = self.ivars().first.window() { window.makeFirstResponder(Some(&self.ivars().first)); }
+            FOCUS_PENDING.with(|pending| pending.set(1));
+        }
         #[unsafe(method(submit:))]
         fn submit(&self, _sender: &NSObject) {
             let state = self.ivars();
@@ -114,21 +166,14 @@ fn menu(app: &NSApplication, mtm: MainThreadMarker) {
     app.setMainMenu(Some(&main));
 }
 pub fn run() -> Result<()> {
-    if std::env::var("BLINDLY4_LIVE").as_deref() != Ok("1") {
-        return Err(Error::usage("The desktop fixture requires BLINDLY4_LIVE=1"));
-    }
     let mtm = MainThreadMarker::new().ok_or_else(|| Error::unexpected("Fixture must run on the main thread"))?;
     let app = NSApplication::sharedApplication(mtm);
     app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
     menu(&app, mtm);
-    let window = unsafe {
-        NSWindow::initWithContentRect_styleMask_backing_defer(
-            NSWindow::alloc(mtm),
-            rect(100.0, 100.0, 640.0, 720.0),
-            NSWindowStyleMask::Titled | NSWindowStyleMask::Closable,
-            NSBackingStoreType::Buffered,
-            false,
-        )
+    let window: Retained<FixtureWindow> = unsafe {
+        msg_send![FixtureWindow::alloc(mtm), initWithContentRect: rect(100.0, 100.0, 640.0, 720.0),
+                  styleMask: NSWindowStyleMask::Titled | NSWindowStyleMask::Closable,
+                  backing: NSBackingStoreType::Buffered, defer: false]
     };
     unsafe {
         window.setReleasedWhenClosed(false);
@@ -142,7 +187,7 @@ pub fn run() -> Result<()> {
     function_row.setAccessibilityTitle(Some(&NSString::from_str("Unavailable actions")));
     view.addSubview(&function_row);
     label(&view, "Fixture ready", 680.0, mtm);
-    text_field(&view, "First field", "first untouched", 640.0, mtm);
+    let first = text_field(&view, "First field", "first untouched", 640.0, mtm);
     let draft = text_field(&view, "Draft", "", 600.0, mtm);
     text_field(&view, "Third field", "third untouched", 560.0, mtm);
     let password = NSSecureTextField::initWithFrame(NSSecureTextField::alloc(mtm), rect(20.0, 520.0, 580.0, 28.0));
@@ -150,6 +195,7 @@ pub fn run() -> Result<()> {
     password.setAccessibilityTitle(Some(&NSString::from_str("Password")));
     view.addSubview(&password);
     let state = State {
+        first,
         draft: draft.clone(),
         submitted: label(&view, "Not submitted", 440.0, mtm),
         count_label: label(&view, "Submission count: 0", 410.0, mtm),
@@ -159,6 +205,16 @@ pub fn run() -> Result<()> {
     };
     let controller: Retained<Controller> = unsafe { msg_send![super(Controller::alloc(mtm).set_ivars(state)), init] };
     unsafe {
+        if std::env::var("BLINDLY4_FIXTURE_VALUE").as_deref() == Ok("delayed-focus") {
+            let delay = NSButton::buttonWithTitle_target_action(
+                &NSString::from_str("Delay draft focus"),
+                Some(&controller),
+                Some(sel!(delayFocus:)),
+                mtm,
+            );
+            delay.setFrame(rect(300.0, 475.0, 240.0, 32.0));
+            view.addSubview(&delay);
+        }
         let submit =
             NSButton::buttonWithTitle_target_action(&NSString::from_str("Submit test draft"), Some(&controller), Some(sel!(submit:)), mtm);
         submit.setFrame(rect(20.0, 475.0, 240.0, 32.0));

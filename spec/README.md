@@ -13,7 +13,7 @@ bundle exec rspec
 
 Defaults: `.build/debug/blindly4` (macOS), `.build/windows/blindly4.exe` (Windows); override with `BLINDLY4_BIN`. Missing binary/no examples fails. Ruby/gems are development-only.
 
-For before/after comparisons, `BLINDLY4_FIXTURE_BIN` can pin the desktop fixture executable while `BLINDLY4_BIN` selects the CLI under test.
+For before/after comparisons, `BLINDLY4_FIXTURE_BIN` pins both desktop and clipboard fixture executables while `BLINDLY4_BIN` selects the CLI under test. Both fixture entry points require `BLINDLY4_LIVE=1` on either OS; dispatch and opt-in checks live in `shared/fixture.rs`.
 
 From each platform directory run `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`.
 
@@ -31,6 +31,8 @@ Remove-Item Env:BLINDLY4_LIVE
 
 Tag cases `:macos, :live` or `:windows, :live`; select with `--tag live`. Fixtures use focus/clipboard, rediscover paths and clean up on failure. Assert visible results and no rejection side effects; retain seeds/failure logs.
 
+Put common behavior in `support/form_examples.rb` or a platform-neutral live spec such as `clipboard_spec.rb`. Shared scenarios cover delayed native focus, formatting whitespace, repeated Unicode typing, root mutation rejection, checkbox keyboard input and clipboard restoration/EOF cleanup. Keep only native format encodings and snapshot layouts in the fixture helpers. Native widget creation, provider behavior, clipboard locks/listeners and platform-specific contracts remain in their respective adapters/specs.
+
 Specs define CLI/desktop/clipboard behavior. Windows interruption specs cover clipboard contention, a competing copy during pending paste, delayed consumption, verification timeout, and focus changes within/across fixture processes. macOS concurrent clipboard changes remain untested. macOS usage errors use stderr; Windows uses stdout JSON.
 
 The Windows clipboard listener scenario registers a real `WM_CLIPBOARDUPDATE` listener and holds the native clipboard open for 100 ms while reading new text. It checks verified paste and restoration under publication-time contention, without retrying input.
@@ -39,7 +41,7 @@ The Windows fixture supports live-only paste modes (`delay`, `hold`, `focus-afte
 
 Fixture only: Enter submits from field two; Space inserts there. Space/Enter activate focused Send; dropdown Enter selects without submission.
 
-Windows provider specs spawn a separate-process native child window. They verify composed-tree discovery, guarded Unicode input, exact-draft rejection, and refusal of stale paths/focus after the child detaches. The fixture child mode is live-only. Form regressions cover formatting whitespace after clear, a failed clear leaving visible text, sibling reordering during paste, and a native focus request that completes after 150 ms. These use actual native edit controls and keyboard/clipboard input.
+Windows provider specs spawn a separate-process native child window. They verify composed-tree discovery, guarded Unicode input, exact-draft rejection, and refusal of stale paths/focus after the child detaches. The fixture child mode is live-only. Both form fixtures cover formatting whitespace after clear and native focus completing after 150 ms; macOS delays its click handler, Windows its focus request. Windows additionally covers a failed clear leaving visible text and sibling reordering during paste. These use actual native edit controls and keyboard/clipboard input.
 
 CI runs permission-free suites on macOS Apple Silicon/Intel and Windows x64/ARM64; live validation is local. Use RSpec, not `cargo test`, `--self-test` or `--integration-test`.
 

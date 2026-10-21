@@ -21,7 +21,7 @@ On Windows, `pid` identifies a native window owner, as in the original C# CLI. U
 
 macOS discovery tolerates unavailable optional AX properties and action lists, as Swift did. Native action/write failures still return errors. Rich-text draft verification reads only the selected writer's own subtree.
 
-Focus requests are issued once, then observed for up to 500 ms to allow asynchronous providers to settle. This wait never repeats text input or submission.
+Focus requests are issued once, then observed for up to 500 ms to allow asynchronous providers to settle. The shared wait also follows macOS click-to-focus paste. If another application takes the foreground after clearing, paste stops instead of activating the target again. This wait never repeats text input or submission.
 
 Windows clipboard publication gives asynchronous readers 50 ms to start, then waits for clipboard access before Ctrl+V. This avoids the observed Explorer read-lock race; it cannot guarantee that another process will not open the clipboard later. Input remains single-attempt and its result must verify exactly.
 

@@ -6,6 +6,8 @@ mod node;
 
 use crate::{error::Result, input, invocation::Invocation, registry::Command};
 pub use clipboard::Clipboard;
+pub use clipboard::fixture as clipboard_fixture;
+pub use fixture::run as desktop_fixture;
 pub use native::{
     Key, PERMISSION_SUMMARY, SCHEMA_SUMMARY, VALUE_SUMMARY, activate_native, activation_pid, apps, click, foreground_pid, key, key_code,
     open_url, request_permission, schema, scroll, text, wait,
@@ -26,15 +28,6 @@ pub fn prepare(command: &Command, invocation: &Invocation) -> Result<Session> {
         ax::require_accessibility()?;
     }
     Ok(Session)
-}
-pub fn fixture(args: &[String]) -> Option<Result<()>> {
-    if args == ["--test-app"] {
-        Some(fixture::run())
-    } else if args == ["--test-pasteboard"] {
-        Some(clipboard::fixture())
-    } else {
-        None
-    }
 }
 pub fn help_requested(args: &[String], global: bool) -> bool {
     args.first().is_some_and(|arg| ["--help", "-h", "help"].contains(&arg.as_str())) || (!global && args.iter().any(|arg| arg == "--help"))

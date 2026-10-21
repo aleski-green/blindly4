@@ -1,11 +1,14 @@
 require 'spec_helper'
 
 module DesktopFixture
+  def fixture_binary
+    File.expand_path(ENV.fetch('BLINDLY4_FIXTURE_BIN', Blindly::BINARY), Blindly::ROOT)
+  end
+
   def start_fixture_with_live_opt_in
     raise 'Live desktop scenarios require BLINDLY4_LIVE=1' unless ENV['BLINDLY4_LIVE'] == '1'
 
     metadata = RSpec.current_example.metadata
-    fixture_binary = File.expand_path(ENV.fetch('BLINDLY4_FIXTURE_BIN', Blindly::BINARY), Blindly::ROOT)
     @fixture_pid = Process.spawn({ 'BLINDLY4_FIXTURE_VALUE' => metadata[:value_mode],
                                   'BLINDLY4_FIXTURE_ROLE' => metadata[:discovery_role],
                                   'BLINDLY4_FIXTURE_PASTE' => metadata[:paste_mode],
@@ -115,7 +118,7 @@ module DesktopFixture
   end
 
   def with_clipboard_fixture
-    Open3.popen3([Blindly::BINARY, Blindly::BINARY], '--test-pasteboard') do |input, output, error, process|
+    Open3.popen3([fixture_binary, fixture_binary], '--test-pasteboard') do |input, output, error, process|
       begin
         yield lambda { |request|
           input.puts(JSON.generate(request)); input.flush
@@ -133,6 +136,28 @@ module DesktopFixture
         expect(status).to eq(0), error.read
       end
     end
+  end
+
+  # Only native format encoding/snapshot layout differs; test behavior is shared.
+  def clipboard_text(text)
+    Blindly::WINDOWS ? { 'CF_UNICODETEXT' => "#{text}\0".encode(Encoding::UTF_16LE).bytes } : { 'public.utf8-plain-text' => text.bytes }
+  end
+
+  def clipboard_items(*items)
+    Blindly::WINDOWS ? items.reduce({}, :merge) : items
+  end
+
+  def expect_clipboard_items(snapshot, items)
+    return expect(snapshot).to eq(items) unless Blindly::WINDOWS
+
+    formats = clipboard_items(*items)
+    expect(snapshot.fetch('data').keys).to match_array(formats.keys)
+    formats.each do |name, bytes|
+      observed = snapshot.fetch('data').fetch(name)
+      expect(observed.take(bytes.length)).to eq(bytes)
+      expect(observed.drop(bytes.length)).to all(eq(0))
+    end
+    expect(snapshot.fetch('formats')).to be_empty if formats.empty?
   end
 
   def expect_untouched_neighbors
