@@ -17,7 +17,9 @@ Invoke directly: `blindly4 schema` lists options, risks and permissions; `--help
 
 ## Safe operation
 
-On Windows, `pid` identifies the application window owner. A cross-process UI Automation provider is accepted only when its nearest native window belongs to a visible top-level window owned by that PID. This supports Chromium's separate providers without accepting unrelated windows; foreground, path identity and draft guards still apply.
+On Windows, `pid` identifies the application window owner. A cross-process UI Automation provider must have native window ownership by that PID, or a reciprocal UIA hosting link from its visible native root to a visible host window owned by that PID. Hosted WebViews are validated against a freshly resolved host HWND and its first accessibility child; process ancestry alone is insufficient. Target the host PID, not the WebView process. Foreground, path identity and draft guards still apply.
+
+Foreground and pointer checks resolve that same verified hosting link, so focusing a hosted WebView does not change its application identity. Inconsistent accessibility parent links still fail closed; use bounded `find --limit` queries for the intended control.
 
 - Serialize whole workflows across apps; input, focus and clipboard are shared. Keep Sapiens4 host ownership; standalone callers supply coordination.
 - Input needs `--pid`. Verify app/recipient/writable child; rediscover paths before mutation. Never invent changing child indexes or infer writability from focus. Use `--require-selected` for selectable press targets.

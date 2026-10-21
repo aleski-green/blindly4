@@ -38,3 +38,5 @@ Fixture only: Enter submits from field two; Space inserts there. Space/Enter act
 Windows provider specs spawn a separate-process native child window. They verify window-owner PID reporting, guarded Unicode input, exact-draft rejection, and refusal of stale paths/focus after the child detaches. Process ancestry alone never authorizes a control. The fixture child mode is live-only.
 
 CI runs permission-free suites on macOS Apple Silicon/Intel and Windows x64/ARM64; live validation is local. Use RSpec, not `cargo test`, `--self-test` or `--integration-test`.
+
+`windows_hosted_provider_spec.rb` additionally tests an installed composition WebView with no native parent/owner relationship. After the fixture suites pass, set `BLINDLY4_LIVE=1`, `BLINDLY4_HOSTED_PID` to its host PID, `BLINDLY4_HOSTED_SEARCH_TITLE` to an exact unique, empty search-field title, and `BLINDLY4_HOSTED_SEARCH_TEXT` to harmless search text. It verifies host-PID discovery, paste/focus, wrong-draft rejection and cleanup through the CLI. It never submits the search. Without these variables this app-dependent example is skipped; it is not covered by fixture-only or CI results.

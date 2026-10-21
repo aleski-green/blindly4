@@ -2,7 +2,10 @@
 use super::native;
 use crate::error::{Error, Result};
 use serde_json::{Value, json};
-use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, IsWindowVisible};
+use windows::Win32::{
+    Foundation::HWND,
+    UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, IsWindowVisible},
+};
 use windows::{
     Win32::{System::Com::*, UI::Accessibility::*},
     core::{BSTR, Interface},
@@ -30,13 +33,21 @@ impl Node {
     pub fn focused(&self) -> Result<Self> {
         self.with_application_element(unsafe { self.automation.GetFocusedElement()? })
     }
+    pub fn window_application_pid(window: HWND) -> i32 {
+        let pid = native::window_pid(window);
+        let host = (|| -> Result<Option<i32>> {
+            let node = Self::root(pid)?;
+            unsafe { node.fragment_host(&node.automation.RawViewWalker()?, &node.automation.ElementFromHandle(window)?) }
+        })();
+        host.ok().flatten().unwrap_or(pid)
+    }
     fn require_application_element(&self, element: &IUIAutomationElement) -> Result<()> {
         let observed_pid = unsafe { element.CurrentProcessId()? };
         if observed_pid == self.pid {
             return Ok(());
         }
-        // Chromium providers may use another PID. Require native window ownership;
-        // process ancestry is insufficient. Never walk past the first HWND.
+        // Chromium providers may use another PID. Require native ownership or a
+        // reciprocal UIA hosting link at the first HWND, never process ancestry.
         let walker = unsafe { self.automation.RawViewWalker()? };
         let mut current = element.clone();
         for _ in 0..128 {
@@ -44,6 +55,12 @@ impl Node {
             if !handle.0.is_null() {
                 let root = unsafe { GetAncestor(handle, GA_ROOT) };
                 if !root.0.is_null() && native::window_pid(root) == self.pid && unsafe { IsWindowVisible(root).as_bool() } {
+                    return Ok(());
+                }
+                if !root.0.is_null()
+                    && unsafe { IsWindowVisible(root).as_bool() }
+                    && self.fragment_host(&walker, &unsafe { self.automation.ElementFromHandle(root)? })? == Some(self.pid)
+                {
                     return Ok(());
                 }
                 break;
@@ -58,6 +75,34 @@ impl Node {
             "Target belongs to a different application (expected window PID {}, provider PID {observed_pid}); rediscover the target",
             self.pid
         )))
+    }
+    fn fragment_host(&self, walker: &IUIAutomationTreeWalker, fragment: &IUIAutomationElement) -> Result<Option<i32>> {
+        // Composition WebViews can be native top-level windows hosted in another
+        // process's UIA tree. Verify the host from its HWND, not just an upward link.
+        unsafe {
+            let Some(parent) = nullable_uia_element(walker.GetParentElement(fragment))? else { return Ok(None) };
+            let handle = parent.CurrentNativeWindowHandle()?;
+            let root = GetAncestor(handle, GA_ROOT);
+            let pid = native::window_pid(handle);
+            if handle.0.is_null()
+                || root.0.is_null()
+                || pid <= 0
+                || native::window_pid(root) != pid
+                || !IsWindowVisible(handle).as_bool()
+                || !IsWindowVisible(root).as_bool()
+            {
+                return Ok(None);
+            }
+            let host = self.automation.ElementFromHandle(handle)?;
+            if !self.automation.CompareElements(&parent, &host)?.as_bool() {
+                return Ok(None);
+            }
+            let Some(child) = nullable_uia_element(walker.GetFirstChildElement(&host))? else { return Ok(None) };
+            let Some(current_parent) = nullable_uia_element(walker.GetParentElement(&child))? else { return Ok(None) };
+            Ok((self.automation.CompareElements(&child, fragment)?.as_bool()
+                && self.automation.CompareElements(&current_parent, &host)?.as_bool())
+            .then_some(pid))
+        }
     }
     fn with_application_element(&self, element: IUIAutomationElement) -> Result<Self> {
         self.require_application_element(&element)?;
