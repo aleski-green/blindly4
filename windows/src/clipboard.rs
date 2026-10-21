@@ -168,6 +168,9 @@ impl Clipboard {
         self.replacement_sequence = Some(unsafe { GetClipboardSequenceNumber() });
         drop(_lock);
         // Closing publishes synthesized text formats and advances the sequence.
+        // Let asynchronous clipboard readers (including Explorer) start, then
+        // wait for their lock before input. Native edit controls do not retry it.
+        sleep(Duration::from_millis(50));
         // Reopen before recording it, and do not claim another window's copy.
         let _lock = ClipboardLock::open(self.owner)?;
         if unsafe { GetClipboardOwner()? } != self.owner {

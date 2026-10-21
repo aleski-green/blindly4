@@ -156,8 +156,9 @@ pub fn paste(i: &Invocation) -> Result<()> {
             return node.require_empty_draft();
         }
         if path.is_some() {
-            for _ in 0..100 {
-                platform::wait(0.01);
+            let (attempts, interval) = platform::PASTE_POLL;
+            for _ in 0..attempts {
+                platform::wait(interval);
                 if let Some(node) = &target {
                     if node.exact_draft(text)? && node.has_focus()? && platform::foreground_pid() == pid {
                         return Ok(());

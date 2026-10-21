@@ -13,6 +13,8 @@ bundle exec rspec
 
 Defaults: `.build/debug/blindly4` (macOS), `.build/windows/blindly4.exe` (Windows); override with `BLINDLY4_BIN`. Missing binary/no examples fails. Ruby/gems are development-only.
 
+For before/after comparisons, `BLINDLY4_FIXTURE_BIN` can pin the desktop fixture executable while `BLINDLY4_BIN` selects the CLI under test.
+
 From each platform directory run `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`.
 
 ## Live tests
@@ -30,6 +32,8 @@ Remove-Item Env:BLINDLY4_LIVE
 Tag cases `:macos, :live` or `:windows, :live`; select with `--tag live`. Fixtures use focus/clipboard, rediscover paths and clean up on failure. Assert visible results and no rejection side effects; retain seeds/failure logs.
 
 Specs define CLI/desktop/clipboard behavior. Windows interruption specs cover clipboard contention, a competing copy during pending paste, delayed consumption, verification timeout, and focus changes within/across fixture processes. macOS concurrent clipboard changes remain untested. macOS usage errors use stderr; Windows uses stdout JSON.
+
+The Windows clipboard listener scenario registers a real `WM_CLIPBOARDUPDATE` listener and holds the native clipboard open for 100 ms while reading new text. It checks verified paste and restoration under publication-time contention, without retrying input.
 
 The Windows fixture supports live-only paste modes (`delay`, `hold`, `focus-after`) and background startup. RSpec coordinates native controls and real clipboard operations; production input code has no test hooks. A late-consumption test explicitly demonstrates that restored clipboard text may reach the draft after a failed paste: failure is not a rollback guarantee. Never retry or submit without inspecting the resulting draft.
 

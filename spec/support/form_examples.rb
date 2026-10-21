@@ -144,6 +144,10 @@ RSpec.shared_examples 'a three-field form' do
     password = passwords.first
     expect(app('inspect', '--path', password.fetch('path'))['value']).to be_nil
     expect(app('tree', '--depth', 6, '--max-nodes', 1000).to_json).not_to include('fixture secret')
+    expect(app('find', '--value', 'fixture secret').fetch('matches')).to be_empty
+    shown = cli('show', '--pid', @fixture_pid, '--depth', 6)
+    expect(shown.status).to eq(0)
+    expect(shown.stdout).not_to include('fixture secret')
     rejected_app(64, 'paste', '--target-path', password.fetch('path'), '--text', 'blocked')
     expect_not_submitted
   end

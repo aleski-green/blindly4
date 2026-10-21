@@ -5,12 +5,13 @@ module DesktopFixture
     raise 'Live desktop scenarios require BLINDLY4_LIVE=1' unless ENV['BLINDLY4_LIVE'] == '1'
 
     metadata = RSpec.current_example.metadata
+    fixture_binary = File.expand_path(ENV.fetch('BLINDLY4_FIXTURE_BIN', Blindly::BINARY), Blindly::ROOT)
     @fixture_pid = Process.spawn({ 'BLINDLY4_FIXTURE_VALUE' => metadata[:value_mode],
                                   'BLINDLY4_FIXTURE_ROLE' => metadata[:discovery_role],
                                   'BLINDLY4_FIXTURE_PASTE' => metadata[:paste_mode],
                                   'BLINDLY4_FIXTURE_CHILD' => metadata[:child_process] ? '1' : nil,
                                   'BLINDLY4_FIXTURE_BACKGROUND' => metadata[:background_start] ? '1' : nil },
-                                 [Blindly::BINARY, Blindly::BINARY], '--test-app',
+                                 [fixture_binary, fixture_binary], '--test-app',
                                  in: File::NULL, out: File::NULL, err: File::NULL)
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
     previous_ready = nil

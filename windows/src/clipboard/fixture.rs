@@ -51,6 +51,8 @@ pub fn run() -> Result<()> {
     let mut supplied = BTreeMap::new();
     let mut fixture_contents = None;
     let mut held_lock = None;
+    let mut read_next_update = None;
+    let mut read_updates = 0;
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
         for line in std::io::stdin().lock().lines() {
@@ -66,6 +68,14 @@ pub fn run() -> Result<()> {
             unsafe {
                 let mut message = MSG::default();
                 while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
+                    if message.message == WM_CLIPBOARDUPDATE
+                        && let Some(milliseconds) = read_next_update.take()
+                    {
+                        let _lock = ClipboardLock::open(original.owner)?;
+                        GetClipboardData(13)?;
+                        sleep(Duration::from_millis(milliseconds));
+                        read_updates += 1;
+                    }
                     let _ = TranslateMessage(&message);
                     DispatchMessageW(&message);
                 }
@@ -76,6 +86,16 @@ pub fn run() -> Result<()> {
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             };
             let request: Value = serde_json::from_str(&line)?;
+            if let Some(milliseconds) = request.get("read-next-update-ms").and_then(Value::as_u64) {
+                unsafe { AddClipboardFormatListener(original.owner)? };
+                read_next_update = Some(milliseconds.min(1000));
+                crate::json(&json!({"readerArmed": true}))?;
+                continue;
+            }
+            if request.get("reader-status").and_then(Value::as_bool) == Some(true) {
+                crate::json(&json!({"readUpdates": read_updates}))?;
+                continue;
+            }
             if let Some(locked) = request.get("lock").and_then(Value::as_bool) {
                 if locked && held_lock.is_none() {
                     held_lock = Some(ClipboardLock::open(original.owner)?);

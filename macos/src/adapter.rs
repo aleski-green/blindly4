@@ -67,5 +67,6 @@ pub fn mutation_key(action: &str) -> &'static str {
 }
 
 pub const DESCENDANT_DRAFT: bool = true;
+pub const PASTE_POLL: (usize, f64) = (100, 0.01);
 pub const FOCUS_SELECTION: bool = false;
 pub const VALUE_ERROR: &str = "Target is not a writable text control";

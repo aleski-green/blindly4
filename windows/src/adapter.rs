@@ -82,5 +82,6 @@ impl From<windows::core::Error> for Error {
 }
 
 pub const DESCENDANT_DRAFT: bool = false;
+pub const PASTE_POLL: (usize, f64) = (40, 0.025);
 pub const FOCUS_SELECTION: bool = true;
 pub const VALUE_ERROR: &str = "Target is not a writable UI Automation text control";

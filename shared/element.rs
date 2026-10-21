@@ -67,6 +67,9 @@ impl Node {
         if self.is_root() { Err(Error::usage("Choose a control path")) } else { Ok(()) }
     }
     pub fn text(&self, name: &str) -> Result<String> {
+        if name == "AXValue" {
+            return Ok(self.value()?.unwrap_or_default());
+        }
         Ok(self.property(name)?.and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default())
     }
     pub fn role(&self) -> Result<String> {
