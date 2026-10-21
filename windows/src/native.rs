@@ -80,7 +80,8 @@ pub fn apps() -> Result<Vec<Value>> {
     for window in windows()? {
         groups.entry(window.pid).or_default().push(window.title);
     }
-    Ok(groups.into_iter().map(|(pid, titles)| json!({"pid": pid, "name": process_name(pid), "bundleIdentifier": null, "frontmost": pid == foreground_pid(), "windows": titles})).collect())
+    let foreground = foreground_pid();
+    Ok(groups.into_iter().map(|(pid, titles)| json!({"pid": pid, "name": process_name(pid), "bundleIdentifier": null, "frontmost": pid == foreground, "windows": titles})).collect())
 }
 pub fn activate_native(pid: i32) -> Result<()> {
     let window = windows()?.into_iter().find(|w| w.pid == pid).ok_or_else(|| Error::access(format!("No visible window for PID {pid}")))?;

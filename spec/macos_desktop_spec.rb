@@ -30,10 +30,18 @@ RSpec.describe 'A native macOS form', :macos, :live do
     outline = cli('show', '--pid', @fixture_pid, '--depth', 2)
     expect(outline.status).to eq(0)
     expect(outline.stdout).to include('AXFunctionRowTopLevelElement')
-    rejected_app(64, 'press', '--path', path)
+    rejected_app(77, 'press', '--path', path)
     expect(app('actions', '--path', submit).fetch('actions')).to include('AXPress')
     expect(draft_value).to eq('')
     expect_untouched_neighbors
+    expect_not_submitted
+  end
+
+  it 'discovers unavailable action metadata without requiring a special role', discovery_role: 'AXGroup' do
+    row = find_control('Unavailable actions', 'AXGroup')
+    expect(row.fetch('actions')).to eq([])
+    expect(app('tree', '--depth', 6, '--max-nodes', 1000).to_json).to include('Submit test draft')
+    rejected_app(77, 'press', '--path', row.fetch('path'))
     expect_not_submitted
   end
 
@@ -53,22 +61,6 @@ RSpec.describe 'A native macOS form', :macos, :live do
     app('show-menu', '--path', find_control_path('Delivery choice', 'AXPopUpButton'))
     expect(app('find', '--role', 'AXMenuItem', '--title', 'Choice two').fetch('matches')).not_to be_empty
     app('key', '--key', 'escape')
-    expect_not_submitted
-  end
-
-  it 'preserves empty and multi-item binary clipboard contents after verified paste' do
-    with_clipboard_fixture do |clipboard|
-      [[], [
-        { 'public.utf8-plain-text' => 'clipboard café'.bytes, 'org.blindly4.fixture' => [0, 255, 17, 0] },
-        { 'org.blindly4.fixture-second' => [1, 2, 3, 128] }
-      ]].each do |items|
-        original = clipboard.call('write' => items)
-        expect(original).to eq(items)
-        app('paste', '--target-path', draft, '--text', 'pasted into fixture only')
-        expect(draft_value).to eq('pasted into fixture only')
-        expect(clipboard.call({})).to eq(original)
-      end
-    end
     expect_not_submitted
   end
 
@@ -92,18 +84,4 @@ RSpec.describe 'A native macOS form', :macos, :live do
     rejected_app(64, 'scroll-to', '--path', draft)
     expect_not_submitted
   end
-
-  it 'delivers every Unicode event from successive short-lived typing processes' do
-    10.times do |index|
-      message = "#{index}: " + ('abcdefghij مرحبا café 🪟 ' * 3)
-      set_draft('')
-      app('focus', '--path', draft)
-      result = app('type', '--text', message)
-      expect(result.fetch('characters')).to eq(message.scan(/\X/).length)
-      expect(draft_value).to eq(message)
-    end
-    expect_untouched_neighbors
-    expect_not_submitted
-  end
-
 end

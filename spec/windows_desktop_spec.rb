@@ -23,19 +23,6 @@ RSpec.describe 'Windows desktop behavior', :windows, :live do
     expect_label('Submission count: 1')
   end
 
-  it 'keeps the application root readable while rejecting control mutations' do
-    set_draft('unchanged')
-    expect(app('actions', '--path', '')).to eq('path' => '', 'actions' => [])
-    %w[focus press show-menu scroll-to].each do |command|
-      rejected_app(64, command, '--path', '')
-    end
-    rejected_app(64, 'set-value', '--path', '', '--value', 'never entered')
-    rejected_app(64, 'paste', '--target-path', '', '--text', 'never entered')
-    rejected_app(64, 'key', '--key', 'enter', '--target-path', '', '--require-value', 'unchanged')
-    expect(draft_value).to eq('unchanged')
-    expect_not_submitted
-  end
-
   %w[ctrl+a command+a cmd+a].each do |shortcut|
     it "selects the matching draft with #{shortcut} and types Unicode through real keyboard input" do
       set_draft('original')

@@ -10,6 +10,8 @@ use crate::{
     registry::Command,
 };
 pub use clipboard::Clipboard;
+pub use clipboard::fixture::run as clipboard_fixture;
+pub use fixture::run as desktop_fixture;
 pub use native::{
     Key, PERMISSION_SUMMARY, SCHEMA_SUMMARY, VALUE_SUMMARY, activate_native, activation_pid, apps, click, foreground_pid, key, key_code,
     open_url, request_permission, schema, scroll, text, wait,
@@ -45,15 +47,6 @@ pub fn prepare(command: &Command, invocation: &Invocation) -> Result<ComApartmen
     input::validate(command, invocation)?;
     Ok(session)
 }
-pub fn fixture(args: &[String]) -> Option<Result<()>> {
-    if args == ["--test-app"] {
-        Some(fixture::run())
-    } else if args == ["--test-pasteboard"] {
-        Some(clipboard::fixture::run())
-    } else {
-        None
-    }
-}
 pub fn help_requested(args: &[String], global: bool) -> bool {
     args == ["--help"] || (global && args == ["help"])
 }
@@ -82,5 +75,6 @@ impl From<windows::core::Error> for Error {
 }
 
 pub const DESCENDANT_DRAFT: bool = false;
+pub const PASTE_POLL: (usize, f64) = (40, 0.025);
 pub const FOCUS_SELECTION: bool = true;
 pub const VALUE_ERROR: &str = "Target is not a writable UI Automation text control";

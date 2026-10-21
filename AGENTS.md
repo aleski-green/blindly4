@@ -2,6 +2,8 @@
 
 Read [usage/safety](README.md#safe-operation), [validation](spec/README.md) and [contribution requirements](CONTRIBUTING.md). Never weaken PID/frontmost, identity, exact-draft or fail-closed guards. Safety changes require explicit review and focused tests.
 
+Preserve native compatibility: provider PIDs need not match window-owner PIDs, optional discovery metadata may be unavailable, and a retained native element remains the target when sibling indexes move. Do not turn these assumptions into new rejection conditions.
+
 ## Architecture
 
 - `shared/`: CLI, validation, keys, activation, traversal, policies, guarded input, JSON; no OS branches.

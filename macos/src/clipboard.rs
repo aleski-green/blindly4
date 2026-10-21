@@ -74,9 +74,6 @@ pub fn fixture() -> Result<()> {
     use objc2_foundation::NSData;
     use serde_json::{Value, json};
     use std::io::BufRead;
-    if std::env::var("BLINDLY4_LIVE").as_deref() != Ok("1") {
-        return Err(Error::usage("Clipboard fixture requires BLINDLY4_LIVE=1"));
-    }
     let mut original = Clipboard::capture()?;
     let snapshot = || -> Value {
         let mut result = vec![];

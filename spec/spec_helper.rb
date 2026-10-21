@@ -15,8 +15,8 @@ module Blindly
     end
   end
 
-  def cli(*arguments)
-    Open3.popen3([BINARY, BINARY], *arguments.map(&:to_s), chdir: ROOT) do |input, output, error, child|
+  def cli(*arguments, env: {})
+    Open3.popen3(env, [BINARY, BINARY], *arguments.map(&:to_s), chdir: ROOT) do |input, output, error, child|
       input.close
       readers = [output, error].map { |stream| Thread.new { stream.read.force_encoding(Encoding::UTF_8) } }
       begin
@@ -41,8 +41,8 @@ module Blindly
     result.json
   end
 
-  def usage_error(*arguments)
-    result = cli(*arguments)
+  def usage_error(*arguments, env: {})
+    result = cli(*arguments, env: env)
     expect(result.status).to eq(64), "#{arguments.inspect}: exit #{result.status}\n#{result.stdout}\n#{result.stderr}"
     if WINDOWS
       expect(result.json).to include('code' => 'usage_error', 'error' => a_string_matching(/\S/))

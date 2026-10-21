@@ -1,6 +1,12 @@
 require 'spec_helper'
 
 RSpec.describe 'The public CLI' do
+  %w[--test-app --test-pasteboard].each do |fixture|
+    it "requires explicit live opt-in for #{fixture}" do
+      usage_error(fixture, env: { 'BLINDLY4_LIVE' => nil })
+    end
+  end
+
   it 'rejects duplicate options instead of silently overriding them' do
     usage_error('tree', '--depth', '2', '--depth', '3')
   end

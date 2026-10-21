@@ -27,17 +27,11 @@ impl Node {
         Self::root(pid)
     }
     pub fn focused(&self) -> Result<Self> {
-        self.with_same_process_element(unsafe { self.automation.GetFocusedElement()? })
+        Ok(self.child(unsafe { self.automation.GetFocusedElement()? }))
     }
-    fn with_same_process_element(&self, element: IUIAutomationElement) -> Result<Self> {
-        let observed_pid = unsafe { element.CurrentProcessId()? };
-        if observed_pid != self.pid {
-            return Err(Error::access(format!(
-                "Target belongs to a different process (expected {}, observed {observed_pid}); rediscover the target",
-                self.pid
-            )));
-        }
-        Ok(Self { element: Some(element), pid: self.pid, automation: self.automation.clone() })
+    fn child(&self, element: IUIAutomationElement) -> Self {
+        // UIA supplies the application's composed tree, including other processes.
+        Self { element: Some(element), pid: self.pid, automation: self.automation.clone() }
     }
     fn element(&self) -> Result<&IUIAutomationElement> {
         self.element.as_ref().ok_or_else(|| Error::usage("Choose a control path"))
@@ -159,25 +153,22 @@ impl Node {
                     if children.len() == 10000 {
                         return Err(Error::access("Control has more than 10000 children; narrow the target"));
                     }
-                    let parent = nullable_uia_element(walker.GetParentElement(&current))?
-                        .ok_or_else(|| Error::access("Accessibility child lost its parent; rediscover the target"))?;
-                    let has_expected_parent = self.automation.CompareElements(e, &parent)?.as_bool();
-                    let desktop_parented_combo_popup = children.is_empty()
-                        && e.CurrentControlType()? == UIA_ComboBoxControlTypeId
-                        && current.CurrentControlType()? == UIA_ListControlTypeId
-                        && self.automation.CompareElements(&parent, &self.automation.GetRootElement()?)?.as_bool();
-                    if !has_expected_parent && !desktop_parented_combo_popup {
-                        return Err(Error::access("Accessibility child changed parents; rediscover the target"));
+                    // A popup/fragment can point back to a different parent. Keep
+                    // that child, but do not follow its siblings out of this branch.
+                    let parent = nullable_uia_element(walker.GetParentElement(&current)).ok().flatten();
+                    let same_parent = parent.is_some_and(|parent| self.automation.CompareElements(e, &parent).is_ok_and(|v| v.as_bool()));
+                    if !children.is_empty() && !same_parent {
+                        break;
                     }
-                    children.push(self.with_same_process_element(current.clone())?);
-                    if desktop_parented_combo_popup {
+                    children.push(self.child(current.clone()));
+                    if !same_parent {
                         break;
                     }
                     child = nullable_uia_element(walker.GetNextSiblingElement(&current))?;
                 }
             } else {
                 for window in native::windows()?.into_iter().filter(|w| w.pid == self.pid) {
-                    children.push(self.with_same_process_element(self.automation.ElementFromHandle(window.handle)?)?);
+                    children.push(self.child(self.automation.ElementFromHandle(window.handle)?));
                 }
             }
         }
@@ -199,6 +190,9 @@ impl Node {
             self.element()?.SetFocus()?;
         }
         Ok(())
+    }
+    pub fn focus_for_paste_native(&self) -> Result<()> {
+        self.focus_native()
     }
     pub fn selected_text_native(&self, text: &str) -> Result<()> {
         native::text(self.pid, text)

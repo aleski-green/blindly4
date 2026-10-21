@@ -43,13 +43,13 @@ fn snapshot(owner: HWND, supplied: &BTreeMap<String, u32>) -> Result<(Value, u32
 }
 
 pub fn run() -> Result<()> {
-    if std::env::var("BLINDLY4_LIVE").as_deref() != Ok("1") {
-        return Err(Error::usage("Clipboard fixture requires BLINDLY4_LIVE=1"));
-    }
     // Save user data privately. Only RSpec-supplied format bytes go to stdout.
     let mut original = Clipboard::capture()?;
     let mut supplied = BTreeMap::new();
     let mut fixture_contents = None;
+    let mut held_lock = None;
+    let mut read_next_update = None;
+    let mut read_updates = 0;
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
         for line in std::io::stdin().lock().lines() {
@@ -65,6 +65,14 @@ pub fn run() -> Result<()> {
             unsafe {
                 let mut message = MSG::default();
                 while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
+                    if message.message == WM_CLIPBOARDUPDATE
+                        && let Some(milliseconds) = read_next_update.take()
+                    {
+                        let _lock = ClipboardLock::open(original.owner)?;
+                        GetClipboardData(13)?;
+                        sleep(Duration::from_millis(milliseconds));
+                        read_updates += 1;
+                    }
                     let _ = TranslateMessage(&message);
                     DispatchMessageW(&message);
                 }
@@ -75,6 +83,28 @@ pub fn run() -> Result<()> {
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             };
             let request: Value = serde_json::from_str(&line)?;
+            if let Some(milliseconds) = request.get("read-next-update-ms").and_then(Value::as_u64) {
+                unsafe { AddClipboardFormatListener(original.owner)? };
+                read_next_update = Some(milliseconds.min(1000));
+                crate::json(&json!({"readerArmed": true}))?;
+                continue;
+            }
+            if request.get("reader-status").and_then(Value::as_bool) == Some(true) {
+                crate::json(&json!({"readUpdates": read_updates}))?;
+                continue;
+            }
+            if let Some(locked) = request.get("lock").and_then(Value::as_bool) {
+                if locked && held_lock.is_none() {
+                    held_lock = Some(ClipboardLock::open(original.owner)?);
+                } else if !locked {
+                    held_lock = None;
+                }
+                crate::json(&json!({"locked": held_lock.is_some()}))?;
+                continue;
+            }
+            if held_lock.is_some() {
+                return Err(Error::usage("Unlock the fixture clipboard before reading or writing"));
+            }
             if let Some(write) = request.get("write") {
                 let rows = write.as_object().ok_or_else(|| Error::usage("Expected clipboard format object"))?;
                 let mut replacements = vec![];
@@ -122,6 +152,7 @@ pub fn run() -> Result<()> {
         }
         Ok(())
     })();
+    drop(held_lock);
     // A real paste restores our data with a new sequence number. Reclaim it only
     // if its native formats and bytes still match, preserving unrelated copies.
     if let Some(expected) = fixture_contents {

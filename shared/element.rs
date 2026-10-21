@@ -19,7 +19,15 @@ impl Node {
         Ok(node)
     }
     pub fn require_focused_draft(&self, expected: &str) -> Result<()> {
-        if self.writable()? && self.has_focus()? && self.exact_draft(expected)? && platform::foreground_pid() == self.pid() {
+        self.require_input(self.exact_draft(expected)?)
+    }
+    pub fn require_empty_draft(&self) -> Result<()> {
+        // Web editors can retain formatting whitespace after a successful clear.
+        // Only this pre-paste check treats it as empty; submission stays exact.
+        self.require_input(self.value()?.is_some_and(|value| guards::normalize(&value).trim().is_empty()))
+    }
+    fn require_input(&self, matches: bool) -> Result<()> {
+        if self.editable()? && self.has_focus()? && matches && platform::foreground_pid() == self.pid() {
             return Ok(());
         }
         Err(Error::access("Input blocked: writable target, keyboard focus, exact draft and foreground PID must all match. Do not send."))
@@ -27,11 +35,27 @@ impl Node {
     pub fn focus(&self) -> Result<()> {
         self.check_control()?;
         crate::application::activate(self.pid())?;
-        self.focus_native()?;
-        if !self.has_focus()? {
-            return Err(Error::access("The target did not receive keyboard focus"));
+        self.focus_with(|| self.focus_native())
+    }
+    pub fn focus_for_paste(&self) -> Result<()> {
+        self.focus_with(|| self.focus_for_paste_native())
+    }
+    fn focus_with(&self, request: impl FnOnce() -> Result<()>) -> Result<()> {
+        self.check_control()?;
+        // Paste already activated the app before clearing; do not reclaim focus
+        // if another app took it in the meantime.
+        crate::application::require_foreground(self.pid())?;
+        request()?;
+        for _ in 0..20 {
+            if platform::foreground_pid() != self.pid() {
+                break;
+            }
+            if self.has_focus().unwrap_or(false) {
+                return Ok(());
+            }
+            platform::wait(0.025);
         }
-        Ok(())
+        Err(Error::access("The target did not receive keyboard focus"))
     }
 }
 
@@ -53,6 +77,9 @@ impl Node {
         if self.is_root() { Err(Error::usage("Choose a control path")) } else { Ok(()) }
     }
     pub fn text(&self, name: &str) -> Result<String> {
+        if name == "AXValue" {
+            return Ok(self.value()?.unwrap_or_default());
+        }
         Ok(self.property(name)?.and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default())
     }
     pub fn role(&self) -> Result<String> {
@@ -65,11 +92,13 @@ impl Node {
         if self.secure()? { Ok(None) } else { Ok(self.property("AXValue")?.and_then(|v| v.as_str().map(str::to_owned))) }
     }
     pub fn writable(&self) -> Result<bool> {
+        Ok(self.editable()? && self.value_settable()?)
+    }
+    fn editable(&self) -> Result<bool> {
         Ok(!self.is_root()
             && !self.secure()?
             && matches!(self.role()?.as_str(), "AXTextField" | "AXTextArea" | "AXComboBox")
-            && self.property("AXEnabled")? != Some(serde_json::json!(false))
-            && self.value_settable()?)
+            && self.property("AXEnabled")? != Some(serde_json::json!(false)))
     }
     pub fn has_focus(&self) -> Result<bool> {
         Ok(self.focus_flag()? && self.same(&self.focused()?))
@@ -97,11 +126,12 @@ impl Node {
         if self.secure()? {
             return Ok(false);
         }
-        // A readable value is authoritative; descendants cannot override a mismatch.
-        if let Some(actual) = self.value()? {
-            return Ok(guards::exact(&actual, expected));
+        if self.value()?.is_some_and(|actual| guards::exact(&actual, expected)) {
+            return Ok(true);
         }
-        if !platform::DESCENDANT_DRAFT {
+        // Swift also reads rich-text descendants in the writer's own subtree.
+        // Empty labels must never stand in for an unreadable empty draft.
+        if !platform::DESCENDANT_DRAFT || expected.is_empty() {
             return Ok(false);
         }
         let mut stack = vec![(self.clone(), 4)];

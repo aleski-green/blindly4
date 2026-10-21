@@ -25,7 +25,48 @@ const COMBO_STATUS: i32 = 302;
 const SCROLL_STATUS: i32 = 303;
 const SEND_COUNT: i32 = 304;
 const READY: i32 = 305;
+const PASTE_STATUS: i32 = 306;
+const RELEASE_PASTE: i32 = 307;
+const SWITCH_FIXTURE: i32 = 308;
+const DETACH_CHILD: i32 = 309;
+const DELAY_FOCUS: i32 = 310;
 const SELECT_EDIT_TEXT_MESSAGE: u32 = 0x00b1;
+static ORIGINAL_EDIT: std::sync::OnceLock<WNDPROC> = std::sync::OnceLock::new();
+static FOCUS_PENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+unsafe extern "system" fn draft_procedure(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    unsafe {
+        let original = *ORIGINAL_EDIT.get().unwrap();
+        let mode = std::env::var("BLINDLY4_FIXTURE_VALUE").unwrap_or_default();
+        if message == WM_SETFOCUS && FOCUS_PENDING.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            let result = CallWindowProcW(original, window, message, wparam, lparam);
+            if let Ok(parent) = GetParent(window) {
+                let _ = SetFocus(GetDlgItem(Some(parent), FIRST).ok());
+                SetTimer(Some(parent), 3, 150, None);
+            }
+            return result;
+        }
+        if matches!(mode.as_str(), "whitespace" | "retained") && message == WM_SETTEXT && lparam.0 != 0 && *(lparam.0 as *const u16) == 0 {
+            let value = native::wide(if mode == "whitespace" { "\r\n" } else { "retained draft" });
+            let result = CallWindowProcW(original, window, message, wparam, LPARAM(value.as_ptr() as isize));
+            SendMessageW(window, SELECT_EDIT_TEXT_MESSAGE, Some(WPARAM(0)), Some(LPARAM(-1)));
+            return result;
+        }
+        CallWindowProcW(original, window, message, wparam, lparam)
+    }
+}
+
+unsafe fn release_paste(window: HWND) {
+    unsafe {
+        if let (Ok(status), Ok(draft)) = (GetDlgItem(Some(window), PASTE_STATUS), GetDlgItem(Some(window), DRAFT)) {
+            let label = read_window_text(status);
+            if let Some(count) = label.strip_prefix("Paste pending: ") {
+                SendMessageW(draft, WM_PASTE, None, None);
+                set_label_text(window, PASTE_STATUS, &format!("Paste completed: {count}"));
+            }
+        }
+    }
+}
 
 unsafe fn read_window_text(window: HWND) -> String {
     unsafe {
@@ -65,7 +106,34 @@ unsafe fn refresh_control_status(window: HWND) {
 unsafe extern "system" fn procedure(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     unsafe {
         match message {
+            WM_COMMAND if (wparam.0 & 0xffff) == DELAY_FOCUS as usize => {
+                let _ = SetFocus(GetDlgItem(Some(window), FIRST).ok());
+                FOCUS_PENDING.store(true, std::sync::atomic::Ordering::SeqCst);
+                LRESULT(0)
+            }
+            WM_COMMAND if (wparam.0 & 0xffff) == DETACH_CHILD as usize => {
+                let _ = SetParent(window, None);
+                SetWindowLongPtrW(window, GWL_STYLE, WS_OVERLAPPEDWINDOW.0 as isize | WS_VISIBLE.0 as isize);
+                let _ = SetWindowPos(window, None, 900, 40, 800, 650, SWP_FRAMECHANGED | SWP_NOZORDER);
+                let _ = SetForegroundWindow(window);
+                LRESULT(0)
+            }
             DM_GETDEFID => LRESULT(((DC_HASDEFID << 16) | SUBMIT as u32) as isize),
+            WM_COMMAND if (wparam.0 & 0xffff) == RELEASE_PASTE as usize => {
+                release_paste(window);
+                LRESULT(0)
+            }
+            WM_COMMAND if (wparam.0 & 0xffff) == SWITCH_FIXTURE as usize => {
+                // The foreground fixture cooperatively activates a second fixture.
+                // No foreground restrictions in the production CLI are bypassed.
+                if let Ok(windows) = native::windows()
+                    && let Some(other) =
+                        windows.iter().find(|w| w.pid != std::process::id() as i32 && w.title == "Blindly4 Windows Test Fixture")
+                {
+                    let _ = SetForegroundWindow(other.handle);
+                }
+                LRESULT(0)
+            }
             WM_COMMAND if (wparam.0 & 0xffff) == SUBMIT as usize => {
                 if let Ok(draft) = GetDlgItem(Some(window), DRAFT) {
                     set_label_text(window, RESULT, &format!("Submitted: {}", read_window_text(draft)));
@@ -73,6 +141,16 @@ unsafe extern "system" fn procedure(window: HWND, message: u32, wparam: WPARAM, 
                     SetWindowLongPtrW(window, GWLP_USERDATA, count);
                     set_label_text(window, SEND_COUNT, &format!("Submission count: {count}"));
                 }
+                LRESULT(0)
+            }
+            WM_TIMER if wparam.0 == 2 => {
+                let _ = KillTimer(Some(window), 2);
+                release_paste(window);
+                LRESULT(0)
+            }
+            WM_TIMER if wparam.0 == 3 => {
+                let _ = KillTimer(Some(window), 3);
+                let _ = SetFocus(GetDlgItem(Some(window), DRAFT).ok());
                 LRESULT(0)
             }
             WM_TIMER => {
@@ -95,6 +173,19 @@ unsafe extern "system" fn procedure(window: HWND, message: u32, wparam: WPARAM, 
 }
 pub fn run() -> Result<()> {
     native::dpi_awareness();
+    let background = std::env::var("BLINDLY4_FIXTURE_BACKGROUND").as_deref() == Ok("1");
+    let paste_mode = std::env::var("BLINDLY4_FIXTURE_PASTE").unwrap_or_default();
+    let host_pid = std::env::var("BLINDLY4_FIXTURE_HOST_PID").ok().and_then(|p| p.parse::<i32>().ok());
+    let host = match host_pid {
+        Some(pid) => Some(
+            native::windows()?
+                .into_iter()
+                .find(|w| w.pid == pid && w.title == "Blindly4 Windows Test Fixture")
+                .ok_or_else(|| Error::access("Fixture host window is missing"))?
+                .handle,
+        ),
+        None => None,
+    };
     unsafe {
         let instance = HINSTANCE(GetModuleHandleW(None)?.0);
         let class = w!("Blindly4RustFixture");
@@ -106,18 +197,20 @@ pub fn run() -> Result<()> {
             WINDOW_EX_STYLE::default(),
             class,
             w!("Blindly4 Windows Test Fixture"),
-            WS_OVERLAPPEDWINDOW,
+            if host.is_some() { WS_CHILD } else { WS_OVERLAPPEDWINDOW },
             40,
             40,
             800,
             650,
-            None,
+            host,
             None,
             Some(instance),
             None,
         )?;
-        let _ = ShowWindow(window, SW_SHOW);
-        let _ = SetForegroundWindow(window);
+        let _ = ShowWindow(window, if background { SW_SHOWNOACTIVATE } else { SW_SHOW });
+        if !background {
+            let _ = SetForegroundWindow(window);
+        }
         let create_control = |class: PCWSTR, title: &str, style: WINDOW_STYLE, [x, y, width, height]: [i32; 4], id: i32| {
             let title = native::wide(title);
             CreateWindowExW(
@@ -142,7 +235,13 @@ pub fn run() -> Result<()> {
         };
         create_caption("Local accessibility test — no external actions", [20, 10, 730, 20], 100)?;
         let first = create_text_field("First field", "first untouched", [109, FIRST], 35, WINDOW_STYLE::default())?;
-        let draft = create_text_field("Draft", "", [104, DRAFT], 90, WINDOW_STYLE(ES_AUTOHSCROLL as u32))?;
+        let draft_title = if host.is_some() { "Child process draft" } else { "Draft" };
+        let draft = create_text_field(draft_title, "", [104, DRAFT], 90, WINDOW_STYLE(ES_AUTOHSCROLL as u32))?;
+        if std::env::var_os("BLINDLY4_FIXTURE_VALUE").is_some() {
+            let original = SetWindowLongPtrW(draft, GWLP_WNDPROC, draft_procedure as *const () as isize);
+            let _ = ORIGINAL_EDIT.set(std::mem::transmute::<isize, WNDPROC>(original));
+            create_control(w!("BUTTON"), "Delay draft focus", WS_TABSTOP, [20, 575, 180, 28], DELAY_FOCUS)?;
+        }
         let third = create_text_field("Third field", "third untouched", [111, THIRD], 195, WINDOW_STYLE::default())?;
         create_control(w!("BUTTON"), "Submit test draft", WS_TABSTOP | WINDOW_STYLE(BS_DEFPUSHBUTTON as u32), [20, 255, 180, 32], SUBMIT)?;
         create_control(w!("BUTTON"), "Test checkbox", WS_TABSTOP | WINDOW_STYLE(BS_AUTOCHECKBOX as u32), [215, 255, 195, 32], CHECKBOX)?;
@@ -183,13 +282,35 @@ pub fn run() -> Result<()> {
         ] {
             create_caption(text, [20, y, 730, 22], id)?;
         }
+        if !paste_mode.is_empty() {
+            create_caption("Paste attempts: 0", [20, 545, 300, 22], PASTE_STATUS)?;
+            create_control(w!("BUTTON"), "Release pending paste", WS_TABSTOP, [445, 545, 250, 28], RELEASE_PASTE)?;
+            create_control(w!("BUTTON"), "Switch fixture focus", WS_TABSTOP, [445, 580, 250, 28], SWITCH_FIXTURE)?;
+        }
+        if host.is_some() {
+            create_control(w!("BUTTON"), "Detach child window", WS_TABSTOP, [445, 580, 250, 28], DETACH_CHILD)?;
+        }
+        let mut child_process = if std::env::var("BLINDLY4_FIXTURE_CHILD").as_deref() == Ok("1") && host.is_none() {
+            let child = std::process::Command::new(std::env::current_exe()?)
+                .arg("--test-app")
+                .env("BLINDLY4_FIXTURE_HOST_PID", std::process::id().to_string())
+                .env_remove("BLINDLY4_FIXTURE_CHILD")
+                .spawn()?;
+            create_caption(&format!("Child process: {}", child.id()), [20, 545, 400, 22], 310)?;
+            Some(child)
+        } else {
+            None
+        };
         if SetTimer(Some(window), 1, 50, None) == 0 {
             return Err(Error::access("Cannot start fixture status timer"));
         }
-        let _ = ShowWindow(window, SW_SHOW);
-        let _ = SetForegroundWindow(window);
-        let _ = SetFocus(Some(draft));
+        let _ = ShowWindow(window, if background { SW_SHOWNOACTIVATE } else { SW_SHOW });
+        if !background {
+            let _ = SetForegroundWindow(window);
+            let _ = SetFocus(Some(draft));
+        }
         let mut message = MSG::default();
+        let mut paste_count = 0;
         loop {
             let status = GetMessageW(&mut message, None, 0, 0).0;
             if status == -1 {
@@ -197,6 +318,29 @@ pub fn run() -> Result<()> {
             }
             if status == 0 {
                 break;
+            }
+            // Native fixture behaviors, reached only after real Ctrl+V input.
+            // Hold mode lets RSpec coordinate another process without timing guesses.
+            if !paste_mode.is_empty()
+                && message.hwnd == draft
+                && message.message == WM_KEYDOWN
+                && message.wParam.0 == b'V' as usize
+                && GetKeyState(VK_CONTROL.0 as i32) < 0
+            {
+                paste_count += 1;
+                set_label_text(window, PASTE_STATUS, &format!("Paste pending: {paste_count}"));
+                if paste_mode == "delay" {
+                    if SetTimer(Some(window), 2, 250, None) == 0 {
+                        return Err(Error::access("Cannot start delayed paste timer"));
+                    }
+                } else if paste_mode == "focus-after" {
+                    release_paste(window);
+                    let _ = SetFocus(Some(first));
+                } else if paste_mode == "reorder" {
+                    release_paste(window);
+                    SetWindowPos(third, Some(HWND_TOP), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)?;
+                }
+                continue;
             }
             if [first, draft, third].contains(&message.hwnd)
                 && message.message == WM_KEYDOWN
@@ -210,6 +354,10 @@ pub fn run() -> Result<()> {
                 let _ = TranslateMessage(&message);
                 DispatchMessageW(&message);
             }
+        }
+        if let Some(child) = child_process.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
         }
     }
     Ok(())

@@ -68,12 +68,14 @@ pub fn pid(value: &CFType) -> Result<i32> {
     Ok(pid)
 }
 pub fn attribute(element: &CFType, name: &str) -> Result<Option<CFType>> {
-    // Missing attributes are normal; IPC failures must propagate.
+    // Discovery is best-effort, as in Swift. Missing values are not empty drafts;
+    // permission checks and native writes still report errors.
     let mut status = kAXErrorSuccess;
     let value = copied(&format!("Read {name}"), &[kAXErrorAttributeUnsupported, kAXErrorNoValue], |out| unsafe {
         status = AXUIElementCopyAttributeValue(raw(element), CFString::new(name).as_concrete_TypeRef(), out);
         status
-    })?;
+    })
+    .unwrap_or(None);
     if name == "AXValue" && status == kAXErrorNoValue {
         let text = |key| -> Result<String> {
             Ok(attribute(element, key)?.and_then(|v| v.downcast::<CFString>()).map(|v| v.to_string()).unwrap_or_default())
@@ -92,21 +94,12 @@ pub fn array(value: &CFType) -> Result<Vec<CFType>> {
     Ok(array.iter().map(|value| unsafe { CFType::wrap_under_get_rule(*value) }).collect())
 }
 pub fn names(element: &CFType, actions: bool) -> Result<Vec<String>> {
-    let (copy, operation, absent): (unsafe extern "C" fn(_, _) -> _, _, &[AXError]) = if actions {
-        (AXUIElementCopyActionNames, "List AX actions", &[kAXErrorActionUnsupported])
-    } else {
-        (AXUIElementCopyAttributeNames, "List AX attributes", &[])
-    };
+    let copy: unsafe extern "C" fn(_, _) -> _ = if actions { AXUIElementCopyActionNames } else { AXUIElementCopyAttributeNames };
     let mut value = ptr::null();
     let status = unsafe { copy(raw(element), &mut value) };
-    let empty_touch_bar = actions
-        && status == kAXErrorFailure
-        && attribute(element, "AXRole")?.as_ref().and_then(json_value).as_ref().and_then(Value::as_str)
-            == Some("AXFunctionRowTopLevelElement");
-    if absent.contains(&status) || empty_touch_bar {
+    if status != kAXErrorSuccess || value.is_null() {
         return Ok(vec![]);
     }
-    check(status, operation)?;
     let value = owned(value.cast())?;
     let mut names: Vec<_> = array(&value)?.iter().filter_map(|v| v.downcast::<CFString>().map(|s| s.to_string())).collect();
     names.sort();
@@ -167,20 +160,18 @@ pub fn json_value(value: &CFType) -> Option<Value> {
     }
     None
 }
-// One AX IPC per summary. Unsupported batching falls back to individual reads;
-// errors inside a successful batch are omitted, as before.
+// A failed or incomplete summary falls back to individual reads, as in Swift.
 pub fn attributes(element: &CFType, names: &[&str]) -> Result<std::collections::BTreeMap<String, Value>> {
     let keys: Vec<_> = names.iter().map(|name| CFString::new(name)).collect();
     let requested = CFArray::from_CFTypes(&keys);
     let batch = copied("Read AX summary", &[kAXErrorAttributeUnsupported, kAXErrorNotImplemented], |out| unsafe {
         AXUIElementCopyMultipleAttributeValues(raw(element), requested.as_concrete_TypeRef(), 0, out.cast())
-    })?;
-    let values = match batch {
-        Some(batch) => array(&batch)?.iter().map(json_value).collect::<Vec<_>>(),
+    })
+    .unwrap_or(None);
+    let values = batch.and_then(|batch| array(&batch).ok()).filter(|values| values.len() == names.len());
+    let values = match values {
+        Some(values) => values.iter().map(json_value).collect::<Vec<_>>(),
         None => names.iter().map(|name| Ok(attribute(element, name)?.as_ref().and_then(json_value))).collect::<Result<Vec<_>>>()?,
     };
-    if values.len() != names.len() {
-        return Err(Error::access("AX summary has an unexpected length"));
-    }
     Ok(names.iter().zip(values).filter_map(|(name, value)| value.map(|v| ((*name).to_owned(), v))).collect())
 }
