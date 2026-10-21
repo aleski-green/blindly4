@@ -29,14 +29,24 @@ const PASTE_STATUS: i32 = 306;
 const RELEASE_PASTE: i32 = 307;
 const SWITCH_FIXTURE: i32 = 308;
 const DETACH_CHILD: i32 = 309;
+const DELAY_FOCUS: i32 = 310;
 const SELECT_EDIT_TEXT_MESSAGE: u32 = 0x00b1;
 static ORIGINAL_EDIT: std::sync::OnceLock<WNDPROC> = std::sync::OnceLock::new();
+static FOCUS_PENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 unsafe extern "system" fn draft_procedure(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     unsafe {
         let original = *ORIGINAL_EDIT.get().unwrap();
-        if message == WM_SETTEXT && lparam.0 != 0 && *(lparam.0 as *const u16) == 0 {
-            let mode = std::env::var("BLINDLY4_FIXTURE_VALUE").unwrap_or_default();
+        let mode = std::env::var("BLINDLY4_FIXTURE_VALUE").unwrap_or_default();
+        if message == WM_SETFOCUS && FOCUS_PENDING.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            let result = CallWindowProcW(original, window, message, wparam, lparam);
+            if let Ok(parent) = GetParent(window) {
+                let _ = SetFocus(GetDlgItem(Some(parent), FIRST).ok());
+                SetTimer(Some(parent), 3, 150, None);
+            }
+            return result;
+        }
+        if matches!(mode.as_str(), "whitespace" | "retained") && message == WM_SETTEXT && lparam.0 != 0 && *(lparam.0 as *const u16) == 0 {
             let value = native::wide(if mode == "whitespace" { "\r\n" } else { "retained draft" });
             let result = CallWindowProcW(original, window, message, wparam, LPARAM(value.as_ptr() as isize));
             SendMessageW(window, SELECT_EDIT_TEXT_MESSAGE, Some(WPARAM(0)), Some(LPARAM(-1)));
@@ -96,6 +106,11 @@ unsafe fn refresh_control_status(window: HWND) {
 unsafe extern "system" fn procedure(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     unsafe {
         match message {
+            WM_COMMAND if (wparam.0 & 0xffff) == DELAY_FOCUS as usize => {
+                let _ = SetFocus(GetDlgItem(Some(window), FIRST).ok());
+                FOCUS_PENDING.store(true, std::sync::atomic::Ordering::SeqCst);
+                LRESULT(0)
+            }
             WM_COMMAND if (wparam.0 & 0xffff) == DETACH_CHILD as usize => {
                 let _ = SetParent(window, None);
                 SetWindowLongPtrW(window, GWL_STYLE, WS_OVERLAPPEDWINDOW.0 as isize | WS_VISIBLE.0 as isize);
@@ -131,6 +146,11 @@ unsafe extern "system" fn procedure(window: HWND, message: u32, wparam: WPARAM, 
             WM_TIMER if wparam.0 == 2 => {
                 let _ = KillTimer(Some(window), 2);
                 release_paste(window);
+                LRESULT(0)
+            }
+            WM_TIMER if wparam.0 == 3 => {
+                let _ = KillTimer(Some(window), 3);
+                let _ = SetFocus(GetDlgItem(Some(window), DRAFT).ok());
                 LRESULT(0)
             }
             WM_TIMER => {
@@ -221,6 +241,7 @@ pub fn run() -> Result<()> {
         if live && std::env::var_os("BLINDLY4_FIXTURE_VALUE").is_some() {
             let original = SetWindowLongPtrW(draft, GWLP_WNDPROC, draft_procedure as *const () as isize);
             let _ = ORIGINAL_EDIT.set(std::mem::transmute::<isize, WNDPROC>(original));
+            create_control(w!("BUTTON"), "Delay draft focus", WS_TABSTOP, [20, 575, 180, 28], DELAY_FOCUS)?;
         }
         let third = create_text_field("Third field", "third untouched", [111, THIRD], 195, WINDOW_STYLE::default())?;
         create_control(w!("BUTTON"), "Submit test draft", WS_TABSTOP | WINDOW_STYLE(BS_DEFPUSHBUTTON as u32), [20, 255, 180, 32], SUBMIT)?;

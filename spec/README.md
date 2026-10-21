@@ -35,7 +35,7 @@ The Windows fixture supports live-only paste modes (`delay`, `hold`, `focus-afte
 
 Fixture only: Enter submits from field two; Space inserts there. Space/Enter activate focused Send; dropdown Enter selects without submission.
 
-Windows provider specs spawn a separate-process native child window. They verify composed-tree discovery, guarded Unicode input, exact-draft rejection, and refusal of stale paths/focus after the child detaches. The fixture child mode is live-only. Form regressions cover formatting whitespace after clear, a failed clear leaving visible text, and sibling reordering during paste. These use actual native edit controls and keyboard/clipboard input.
+Windows provider specs spawn a separate-process native child window. They verify composed-tree discovery, guarded Unicode input, exact-draft rejection, and refusal of stale paths/focus after the child detaches. The fixture child mode is live-only. Form regressions cover formatting whitespace after clear, a failed clear leaving visible text, sibling reordering during paste, and a native focus request that completes after 150 ms. These use actual native edit controls and keyboard/clipboard input.
 
 CI runs permission-free suites on macOS Apple Silicon/Intel and Windows x64/ARM64; live validation is local. Use RSpec, not `cargo test`, `--self-test` or `--integration-test`.
 

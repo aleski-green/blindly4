@@ -36,10 +36,16 @@ impl Node {
         self.check_control()?;
         crate::application::activate(self.pid())?;
         self.focus_native()?;
-        if !self.has_focus()? {
-            return Err(Error::access("The target did not receive keyboard focus"));
+        for _ in 0..20 {
+            if platform::foreground_pid() != self.pid() {
+                break;
+            }
+            if self.has_focus().unwrap_or(false) {
+                return Ok(());
+            }
+            platform::wait(0.025);
         }
-        Ok(())
+        Err(Error::access("The target did not receive keyboard focus"))
     }
 }
 

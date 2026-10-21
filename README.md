@@ -21,6 +21,8 @@ On Windows, `pid` identifies a native window owner, as in the original C# CLI. U
 
 macOS discovery tolerates unavailable optional AX properties and action lists, as Swift did. Native action/write failures still return errors. Rich-text draft verification reads only the selected writer's own subtree.
 
+Focus requests are issued once, then observed for up to 500 ms to allow asynchronous providers to settle. This wait never repeats text input or submission.
+
 - Serialize whole workflows across apps; input, focus and clipboard are shared. Keep Sapiens4 host ownership; standalone callers supply coordination.
 - Input needs `--pid`. Verify app/recipient/writable child; rediscover paths before mutation. Never invent changing child indexes or infer writability from focus. Use `--require-selected` for selectable press targets.
 - Authorized sends require fresh PID/paths and guards below, or focused `key --pid PID --key return --target-path COMPOSER --require-value TEXT`. Never send with bare `type` then Return.

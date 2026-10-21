@@ -4,6 +4,15 @@ RSpec.describe 'A three-field Windows form', :windows, :live do
   include_context 'a native desktop fixture'
   include_examples 'a three-field form'
 
+  it 'waits for an asynchronous focus request without repeating input', value_mode: 'delayed-focus' do
+    app('press', '--path', find_control_path('Delay draft focus', 'AXButton'))
+    expect(app('focused')).to include('title' => 'First field')
+    expect(app('paste', '--target-path', draft, '--text', 'entered once')).to include('verified' => true)
+    expect(app('focused')).to include('title' => 'Draft', 'value' => 'entered once')
+    expect_not_submitted
+    expect_untouched_neighbors
+  end
+
   it 'accepts formatting whitespace after clear without relaxing nonempty draft matching', value_mode: 'whitespace' do
     app('set-value', '--path', draft, '--value', '')
     expect(draft_value).to eq("\r\n")
