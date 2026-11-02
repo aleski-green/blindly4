@@ -136,7 +136,7 @@ pub fn paste(i: &Invocation) -> Result<()> {
             return Err(Error::usage("Paste target is not a writable text control"));
         }
     }
-    let mut clipboard = Clipboard::capture()?;
+    let mut clipboard = if platform::PASTE_USES_CLIPBOARD { Some(Clipboard::capture()?) } else { None };
     crate::application::activate(pid)?;
     // Retain the resolved native element; sibling index changes do not replace it.
     if let Some(node) = &target {
@@ -144,14 +144,22 @@ pub fn paste(i: &Invocation) -> Result<()> {
         node.focus_for_paste()?;
         node.require_empty_draft()?;
     }
-    clipboard.replace(text)?;
+    if let Some(clipboard) = &mut clipboard {
+        clipboard.replace(text)?;
+    }
     let outcome = (|| -> Result<()> {
         if let Some(node) = &target {
             node.require_empty_draft()?;
         }
         // Pasting an empty string is already complete after the verified clear.
         if !text.is_empty() || path.is_none() {
-            platform::key(pid, &crate::keyboard::parse("command+v")?)?;
+            if clipboard.is_some() {
+                platform::key(pid, &crate::keyboard::parse("command+v")?)?;
+            } else if let Some(node) = &target {
+                node.selected_text(text)?;
+            } else {
+                platform::text(pid, text)?;
+            }
         } else if let Some(node) = &target {
             return node.require_empty_draft();
         }
@@ -170,7 +178,7 @@ pub fn paste(i: &Invocation) -> Result<()> {
         platform::wait(0.3);
         Ok(())
     })();
-    let restoration = clipboard.restore();
+    let restoration = clipboard.as_mut().map(Clipboard::restore).transpose();
     outcome?;
     restoration?;
     let mut result = json!({"characters": platform::characters(text), "ok": true});

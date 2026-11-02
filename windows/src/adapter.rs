@@ -22,6 +22,7 @@ use std::time::Duration;
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
 
 pub const USAGE_ON_STDERR: bool = false;
+pub const PASTE_USES_CLIPBOARD: bool = true;
 pub struct ComApartment;
 impl Drop for ComApartment {
     fn drop(&mut self) {

@@ -8,6 +8,7 @@ From the cloned fork, with stable Rust:
 
 - macOS: Xcode Command Line Tools; `./macos/build.sh` (or `./macos/build.sh debug`) → `.build/<profile>/blindly4` (default release).
 - Windows: MSVC C++ tools/Windows SDK; `.\windows\build.ps1` → `.build/windows/blindly4.exe`. [Platform details](windows/README.md).
+- Linux development preview: `./linux/build.sh [release|debug]` with the committed lockfile. [Scope and limitations](linux/README.md).
 
 Add the output directory to `PATH`; no language runtime needed. On macOS, run `blindly4 request-permission`; grant Codex/the hosting terminal access in System Settings → Privacy & Security → Accessibility. Missing permission fails closed.
 

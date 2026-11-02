@@ -7,7 +7,7 @@ Preserve native compatibility: provider PIDs need not match window-owner PIDs, o
 ## Architecture
 
 - `shared/`: CLI, validation, keys, activation, traversal, policies, guarded input, JSON; no OS branches.
-- `adapters/mod.rs`: compile-time selection of `macos/src/` or `windows/src/` native properties, identity, capabilities, operations and fixtures.
+- `adapters/mod.rs`: compile-time selection of `macos/src/`, `windows/src/` or `linux/src/` native properties, identity, capabilities, operations and fixtures.
 - `shared/registry.rs`: single command declaration: summary, risk, permission, usage, handler; exposed by `schema`.
 
 Keep writable-control, secure-value, exact-draft and key-syntax policies shared; do not duplicate per OS.

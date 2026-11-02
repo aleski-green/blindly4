@@ -19,6 +19,7 @@ use unicode_segmentation::UnicodeSegmentation;
 pub struct Session;
 
 pub const USAGE_ON_STDERR: bool = true;
+pub const PASTE_USES_CLIPBOARD: bool = true;
 pub fn with_runtime(run: impl FnOnce() -> Result<()>) -> Result<()> {
     objc2::rc::autoreleasepool(|_| run())
 }
