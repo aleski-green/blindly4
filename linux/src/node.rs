@@ -69,6 +69,11 @@ impl Node {
         self.reference_proxy(&self.reference, interface)
     }
     fn reference_proxy<'a>(&'a self, reference: &'a Reference, interface: &'a str) -> Result<Proxy<'a>> {
+        if reference.1.as_str() == "/org/a11y/atspi/null" {
+            return Err(Error::access(
+                "Application returned a null accessibility element; rediscover the target. For Chromium, restart with --force-renderer-accessibility.",
+            ));
+        }
         // Each CLI observation reads fresh properties; subscriptions and GetAll
         // caches add work and can block on unrelated provider properties.
         Ok(proxy::Builder::new(&self.connection)
