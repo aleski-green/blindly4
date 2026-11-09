@@ -26,6 +26,7 @@ pub struct Node {
     reference: Reference,
     window: Option<Reference>,
     web: bool,
+    legacy_webkit_roles: bool,
     pid: i32,
     root: bool,
 }
@@ -42,6 +43,7 @@ impl Node {
             reference: ("org.a11y.atspi.Registry".into(), OwnedObjectPath::try_from("/org/a11y/atspi/accessible/root").unwrap()),
             window: None,
             web: false,
+            legacy_webkit_roles: false,
             pid: 0,
             root: true,
         })
@@ -132,7 +134,7 @@ impl Node {
         }
         // Web dialogs also expose AXWindow, but their bounds are not an X11 window.
         // Retain the outer native window used to verify screen coordinates.
-        let role = self.role()?;
+        let (role, legacy_webkit_roles) = self.ax_role()?;
         let web = self.web || role == "AXWebArea";
         let window = match &self.window {
             Some(window) => Some(window.clone()),
@@ -143,6 +145,7 @@ impl Node {
             .into_iter()
             .map(|reference| Self {
                 connection: self.connection.clone(),
+                legacy_webkit_roles: legacy_webkit_roles && reference.0 == self.reference.0,
                 reference,
                 window: window.clone(),
                 web,
@@ -191,41 +194,59 @@ impl Node {
         let window = self.reference_proxy(reference, COMPONENT)?;
         super::x11::coordinate_scale(self.pid, window.call("GetExtents", &0u32)?)
     }
+    fn ax_role(&self) -> Result<(&'static str, bool)> {
+        let accessible = self.proxy(ACCESSIBLE)?;
+        let raw: u32 = accessible.call("GetRole", &())?;
+        // WebKit before upstream fix 300090 used a shifted wire enum. Its web
+        // document identifies the affected provider without guessing from an
+        // individual editable control, distro name, or reported version.
+        let legacy = self.legacy_webkit_roles || (raw == 94 && accessible.call::<_, _, String>("GetRoleName", &())? == "document web");
+        let role = if legacy {
+            match raw {
+                72..=114 => raw + 1,  // Missing Footer before Paragraph.
+                115 | 116 => 67,      // Nonstandard section footer/header (unknown).
+                117..=129 => raw - 1, // Two extra roles before Static.
+                _ => raw,
+            }
+        } else {
+            raw
+        };
+        let mapped = match role {
+            75 => "AXApplication",
+            16 | 19 | 23 | 69 => "AXWindow",
+            40 => "AXSecureTextField",
+            61 | 79 if self.state(EDITABLE_STATE)? => {
+                if self.state(MULTILINE)? {
+                    "AXTextArea"
+                } else {
+                    "AXTextField"
+                }
+            }
+            43 | 62 | 129 => "AXButton",
+            7 | 130 => "AXCheckBox",
+            44 | 37 => "AXRadioButton",
+            11 => "AXComboBox",
+            33 | 41 => "AXMenu",
+            35 => "AXMenuItem",
+            34 => "AXMenuBar",
+            29 | 61 | 73 | 116 => "AXStaticText",
+            88 => "AXLink",
+            27 => "AXImage",
+            31 => "AXList",
+            32 | 90 => "AXRow",
+            55 => "AXTable",
+            48 => "AXScrollBar",
+            51 => "AXSlider",
+            95 => "AXWebArea",
+            83 => "AXHeading",
+            _ => "AXGroup",
+        };
+        Ok((mapped, legacy))
+    }
     pub fn property(&self, name: &str) -> Result<Option<Value>> {
         let accessible = self.proxy(ACCESSIBLE)?;
         Ok(Some(match name {
-            "AXRole" => {
-                let role: u32 = accessible.call("GetRole", &())?;
-                json!(match role {
-                    75 => "AXApplication",
-                    16 | 19 | 23 | 69 => "AXWindow",
-                    40 => "AXSecureTextField",
-                    61 | 79 if self.state(EDITABLE_STATE)? =>
-                        if self.state(MULTILINE)? {
-                            "AXTextArea"
-                        } else {
-                            "AXTextField"
-                        },
-                    43 | 62 | 129 => "AXButton",
-                    7 | 130 => "AXCheckBox",
-                    44 | 37 => "AXRadioButton",
-                    11 => "AXComboBox",
-                    33 | 41 => "AXMenu",
-                    35 => "AXMenuItem",
-                    34 => "AXMenuBar",
-                    29 | 61 | 73 | 116 => "AXStaticText",
-                    88 => "AXLink",
-                    27 => "AXImage",
-                    31 => "AXList",
-                    32 | 90 => "AXRow",
-                    55 => "AXTable",
-                    48 => "AXScrollBar",
-                    51 => "AXSlider",
-                    95 => "AXWebArea",
-                    83 => "AXHeading",
-                    _ => "AXGroup",
-                })
-            }
+            "AXRole" => json!(self.ax_role()?.0),
             // WebKit can stall on GetRoleName for table headers. The canonical
             // role above is sufficient; optional native role-name metadata is omitted.
             "AXSubrole" if self.web => return Ok(None),
