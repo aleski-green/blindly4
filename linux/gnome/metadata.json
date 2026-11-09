@@ -1,7 +1,0 @@
-{
-  "uuid": "foreground@blindly4.sapiens4",
-  "name": "Blindly4 Foreground Verification",
-  "description": "Read-only foreground-window and pointer ownership verification. No input, activation, clipboard, capture or network access.",
-  "shell-version": ["42", "46", "50"],
-  "version": 2
-}

@@ -239,19 +239,14 @@ impl Node {
                 let count: i32 = text.get_property("CharacterCount")?;
                 json!(text.call::<_, _, String>("GetText", &(0i32, count.min(65536)))?)
             }
-            "AXPosition" if super::wayland() => return Ok(None),
             "AXPosition" | "AXSize" if self.supports(COMPONENT)? => {
                 let bounds: std::result::Result<(i32, i32, i32, i32), _> = self.proxy(COMPONENT)?.call("GetExtents", &0u32);
                 let Ok((x, y, width, height)) = bounds else { return Ok(None) };
                 if width <= 0 || height <= 0 {
                     return Ok(None);
                 }
-                let scale = if super::wayland() {
-                    1
-                } else {
-                    let Ok(scale) = self.coordinate_scale() else { return Ok(None) };
-                    i64::from(scale)
-                };
+                let Ok(scale) = self.coordinate_scale() else { return Ok(None) };
+                let scale = i64::from(scale);
                 if name == "AXPosition" {
                     json!({"x": i64::from(x) * scale, "y": i64::from(y) * scale})
                 } else {
@@ -371,19 +366,7 @@ impl Node {
         let focused = || {
             if self.focus_flag()? { Ok(()) } else { Err(Error::access("Text target lost focus; inspect the draft before retrying")) }
         };
-        if super::wayland() {
-            let connection = Connection::session()?;
-            let driver = Proxy::new(&connection, "org.sapiens.Blindly.Input", "/org/sapiens/Blindly/Input", "org.sapiens.Blindly.Input1")?;
-            for character in text.chars() {
-                crate::application::require_foreground(self.pid)?;
-                focused()?;
-                let shifted = character.is_ascii_uppercase() || "~!@#$%^&*()_+{}|:\"<>?".contains(character);
-                let modifiers = if shifted { vec![0xffe1u32] } else { vec![] };
-                driver.call::<_, _, ()>("Key", &(self.pid as u32, character as u32, modifiers))?;
-            }
-        } else {
-            super::x11::text(self.pid, text, focused)?;
-        }
+        super::x11::text(self.pid, text, focused)?;
         for _ in 0..100 {
             if self.exact_draft(&expected)? {
                 return self.require_focused_draft(&expected);

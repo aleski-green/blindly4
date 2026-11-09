@@ -24,6 +24,9 @@ pub fn with_runtime(run: impl FnOnce() -> Result<()>) -> Result<()> {
 pub struct Session;
 pub fn prepare(command: &Command, invocation: &Invocation) -> Result<Session> {
     input::validate(command, invocation)?;
+    if !matches!(command.name, "schema" | "request-permission") && !x11_session() {
+        return Err(Error::access(SESSION_ERROR));
+    }
     match std::env::var("BLINDLY4_LINUX_TEXT_INPUT").as_deref() {
         Err(_) | Ok("atspi") => (),
         Ok("keyboard") => {
@@ -31,14 +34,11 @@ pub fn prepare(command: &Command, invocation: &Invocation) -> Result<Session> {
                 if let Some(text) = invocation.optional("text").or_else(|| invocation.optional("value")) {
                     if text.len() > 4096 || !text.is_ascii() || text.chars().any(char::is_control) {
                         return Err(Error::usage(
-                            "Keyboard text input requires printable ASCII, at most 4096 bytes; use native editable text or the headless browser for Unicode",
+                            "Keyboard text input requires printable ASCII, at most 4096 bytes; use native editable text for Unicode",
                         ));
                     }
-                    if !wayland() {
-                        x11::validate_text(text)?;
-                    }
+                    x11::validate_text(text)?;
                 }
-                keyboard_ready()?;
             }
         }
         Ok(_) => return Err(Error::usage("BLINDLY4_LINUX_TEXT_INPUT must be atspi or keyboard")),
