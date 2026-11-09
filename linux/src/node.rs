@@ -200,7 +200,11 @@ impl Node {
         // WebKit before upstream fix 300090 used a shifted wire enum. Its web
         // document identifies the affected provider without guessing from an
         // individual editable control, distro name, or reported version.
-        let legacy = self.legacy_webkit_roles || (raw == 94 && accessible.call::<_, _, String>("GetRoleName", &())? == "document web");
+        let legacy = self.legacy_webkit_roles
+            || (raw == 94 && self.supports("org.a11y.atspi.Document")? && {
+                let attributes: BTreeMap<String, String> = accessible.call("GetAttributes", &())?;
+                matches!(attributes.get("toolkit").map(String::as_str), Some("WebKitGTK" | "WPEWebKit"))
+            });
         let role = if legacy {
             match raw {
                 72..=114 => raw + 1,  // Missing Footer before Paragraph.
