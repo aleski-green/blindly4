@@ -13,6 +13,7 @@ const EDITABLE: &str = "org.a11y.atspi.EditableText";
 const TEXT: &str = "org.a11y.atspi.Text";
 const COMPONENT: &str = "org.a11y.atspi.Component";
 const ACTION: &str = "org.a11y.atspi.Action";
+const ACTIVE: u32 = 1;
 const EDITABLE_STATE: u32 = 7;
 const SENSITIVE: u32 = 24;
 const FOCUSED: u32 = 12;
@@ -161,6 +162,11 @@ impl Node {
                     .or_else(|| if ambiguous_container { None } else { container })
                     .ok_or_else(|| Error::access("No unambiguous focused control in the application"));
             };
+            // WebKit may retain a focused control behind a native modal dialog.
+            // Only the active top-level window can own the application's focus.
+            if node.window.is_none() && node.role()? == "AXWindow" && !node.state(ACTIVE)? {
+                continue;
+            }
             if node.focus_flag()? {
                 if matches!(node.role()?.as_str(), "AXApplication" | "AXWindow" | "AXWebArea" | "AXGroup") {
                     ambiguous_container |= container.is_some();
@@ -192,7 +198,7 @@ impl Node {
                 let role: u32 = accessible.call("GetRole", &())?;
                 json!(match role {
                     75 => "AXApplication",
-                    16 | 23 | 69 => "AXWindow",
+                    16 | 19 | 23 | 69 => "AXWindow",
                     40 => "AXSecureTextField",
                     61 | 79 if self.state(EDITABLE_STATE)? =>
                         if self.state(MULTILINE)? {
@@ -367,7 +373,8 @@ impl Node {
             if self.focus_flag()? { Ok(()) } else { Err(Error::access("Text target lost focus; inspect the draft before retrying")) }
         };
         super::x11::text(self.pid, text, focused)?;
-        for _ in 0..100 {
+        // WebKit can still be draining queued key events after injection finishes.
+        for _ in 0..500 {
             if self.exact_draft(&expected)? {
                 return self.require_focused_draft(&expected);
             }
