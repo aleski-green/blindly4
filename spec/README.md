@@ -1,48 +1,22 @@
-# Behavioral tests
+# Tests
 
-Ruby 3.4/Bundler; RSpec tests fresh compiled CLI processes via output, exit codes or desktop effects. No Rust unit/internal-function tests, mocks or embedded self-tests.
-
-Default tests must be permission-free.
-
-Build with `./macos/build.sh debug` or `.\windows\build.ps1`, then from the root:
+Install Lean from `lean-toolchain` and build the platform binary.
 
 ```sh
-bundle install
-bundle exec rspec
+lake -d spec test
+BLINDLY4_LIVE=1 lake -d spec test
 ```
 
-Defaults: `.build/debug/blindly4` (macOS), `.build/windows/blindly4.exe` (Windows); override with `BLINDLY4_BIN`. Missing binary/no examples fails. Ruby/gems are development-only.
+The default suite needs no desktop permission. Live tests require an unlocked,
+exclusive desktop and macOS Accessibility permission. Run them serially.
+`BLINDLY4_BIN` selects the tested binary; `BLINDLY4_FIXTURE_BIN` selects fixtures.
+`BLINDLY4_TEST_RESULTS` saves JSON results. `lake -d spec test -- --list` lists cases.
 
-For before/after comparisons, `BLINDLY4_FIXTURE_BIN` pins both desktop and clipboard fixture executables while `BLINDLY4_BIN` selects the CLI under test. Both fixture entry points require `BLINDLY4_LIVE=1` on either OS; dispatch and opt-in checks live in `shared/fixture.rs`.
+Windows live mode: `$env:BLINDLY4_LIVE='1'` before `lake -d spec test`.
+For an installed composition WebView, also set `BLINDLY4_WEBVIEW_PID`,
+`BLINDLY4_WEBVIEW_SEARCH_TITLE`, and `BLINDLY4_WEBVIEW_SEARCH_TEXT`; use a unique,
+empty search field. The test never submits it.
 
-From each platform directory run `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`.
-
-## Live tests
-
-After input/safety changes, run default **and** live suites against harmless fixtures before external-effect controls. Use an unlocked desktop exclusively; grant the macOS host Accessibility permission.
-
-macOS: `BLINDLY4_LIVE=1 bundle exec rspec`. Windows PowerShell:
-
-```powershell
-$env:BLINDLY4_LIVE = '1'
-bundle exec rspec
-Remove-Item Env:BLINDLY4_LIVE
-```
-
-Tag cases `:macos, :live` or `:windows, :live`; select with `--tag live`. Fixtures use focus/clipboard, rediscover paths and clean up on failure. Assert visible results and no rejection side effects; retain seeds/failure logs.
-
-Put common behavior in `support/form_examples.rb` or a platform-neutral live spec such as `clipboard_spec.rb`. Shared scenarios cover delayed native focus, formatting whitespace, repeated Unicode typing, root mutation rejection, checkbox keyboard input and clipboard restoration/EOF cleanup. Keep only native format encodings and snapshot layouts in the fixture helpers. Native widget creation, provider behavior, clipboard locks/listeners and platform-specific contracts remain in their respective adapters/specs.
-
-Specs define CLI/desktop/clipboard behavior. Windows interruption specs cover clipboard contention, a competing copy during pending paste, delayed consumption, verification timeout, and focus changes within/across fixture processes. macOS concurrent clipboard changes remain untested. macOS usage errors use stderr; Windows uses stdout JSON.
-
-The Windows clipboard listener scenario registers a real `WM_CLIPBOARDUPDATE` listener and holds the native clipboard open for 100 ms while reading new text. It checks verified paste and restoration under publication-time contention, without retrying input.
-
-The Windows fixture supports live-only paste modes (`delay`, `hold`, `focus-after`) and background startup. RSpec coordinates native controls and real clipboard operations; production input code has no test hooks. A late-consumption test explicitly demonstrates that restored clipboard text may reach the draft after a failed paste: failure is not a rollback guarantee. Never retry or submit without inspecting the resulting draft.
-
-Fixture only: Enter submits from field two; Space inserts there. Space/Enter activate focused Send; dropdown Enter selects without submission.
-
-Windows provider specs spawn a separate-process native child window. They verify composed-tree discovery, guarded Unicode input, exact-draft rejection, and refusal of stale paths/focus after the child detaches. The fixture child mode is live-only. Both form fixtures cover formatting whitespace after clear and native focus completing after 150 ms; macOS delays its click handler, Windows its focus request. Windows additionally covers a failed clear leaving visible text and sibling reordering during paste. These use actual native edit controls and keyboard/clipboard input.
-
-CI runs permission-free suites on macOS Apple Silicon/Intel and Windows x64/ARM64; live validation is local. Use RSpec, not `cargo test`, `--self-test` or `--integration-test`.
-
-`windows_hosted_provider_spec.rb` additionally tests an installed composition WebView. After the fixture suites pass, set `BLINDLY4_LIVE=1`, `BLINDLY4_WEBVIEW_PID` to its native content-window PID from `apps`, `BLINDLY4_WEBVIEW_SEARCH_TITLE` to an exact unique, empty search-field title, and `BLINDLY4_WEBVIEW_SEARCH_TEXT` to harmless search text. It verifies discovery, paste/focus, wrong-draft rejection and cleanup through the CLI. It never submits the search. Without these variables this app-dependent example is skipped; it is not covered by fixture-only or CI results.
+Run `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` from each
+platform directory. Input/safety changes require default and live tests.
+Test public CLI behavior and native effects; do not add internal unit tests or self-test modes.

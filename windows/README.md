@@ -1,9 +1,15 @@
-# Windows specifics
+# Windows
 
-See [usage/safety](../README.md), [tests](../spec/README.md). Only the logged-in interactive desktop is supported, excluding elevated apps/secure desktop. No admin/WSL required; `request-permission` only explains access.
+Requires Rust, MSVC C++ tools and Windows SDK; use the logged-in interactive desktop.
+Elevated apps and the secure desktop are unsupported.
 
-Build defaults to host architecture; override `-Runtime win-x64`/`win-arm64`, installing matching Rust/MSVC targets. Alternatively use matching `*-pc-windows-gnullvm`, LLVM-MinGW on `PATH`, and `-Toolchain gnullvm`. C/unwind runtimes link statically; CI uses native MSVC.
+```powershell
+.\windows\build.ps1 -Runtime win-x64
+```
 
-Paths: synthetic `AXApplication`, handle-sorted windows, UIA Control View children. Passwords are redacted; inaccessible/stale controls error. Activation failure blocks input; clicks/wheel verify the pointer's app.
+Use `win-arm64` with a matching toolchain. GNU LLVM builds accept `-Toolchain gnullvm`.
+Target the native window owner PID from `apps`, including separate WebView windows.
+`cmd`/`command` map to Ctrl. Passwords are redacted; stale/inaccessible targets fail.
+Clipboard restoration preserves competing copies; unsupported formats fail before input.
 
-`command`/`cmd` = Ctrl; `delete`/`backspace` = backward, `forward-delete` = forward. Scroll uses Windows-configured wheel ticks. `show-menu` needs ExpandCollapsePattern; `scroll-to`: ScrollItemPattern; guarded editing: writable ValuePattern, not read-only TextPattern. Guards inspect only the target. Owner-managed/uncopyable clipboard formats fail before input; restoration preserves newer copies.
+[Usage and safety](../README.md) · [Tests](../spec/README.md)

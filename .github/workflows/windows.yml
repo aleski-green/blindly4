@@ -28,13 +28,19 @@ jobs:
       - name: Build native executable
         shell: pwsh
         run: ./windows/build.ps1 -Runtime ${{ matrix.runtime }}
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.4'
-      - name: RSpec CLI behavior
+      - name: Install pinned Lean
+        shell: pwsh
         run: |
-          bundle install
-          bundle exec rspec
+          $version = (Get-Content spec/lean-toolchain).Trim().Replace('leanprover/lean4:v', '')
+          $archive = "lean-$version-windows.zip"
+          Invoke-WebRequest "https://github.com/leanprover/lean4/releases/download/v$version/$archive" -OutFile "$env:RUNNER_TEMP/$archive"
+          Expand-Archive "$env:RUNNER_TEMP/$archive" -DestinationPath $env:RUNNER_TEMP
+          "$env:RUNNER_TEMP/lean-$version-windows/bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: Lean CLI behavior
+        shell: pwsh
+        run: |
+          lake -d spec test
+          if ($LASTEXITCODE) { throw 'Lean tests failed' }
       - uses: actions/upload-artifact@v4
         with:
           name: blindly4-${{ matrix.runtime }}
