@@ -67,7 +67,7 @@ impl Drop for Clipboard {
     }
 }
 
-// Opt-in fixture transport: RSpec supplies/observes bytes and owns assertions.
+// Opt-in fixture transport: Lean tests supplies/observes bytes and owns assertions.
 // Original user clipboard data never goes to stdout and is restored on EOF when
 // the clipboard still contains the fixture's last supplied data.
 pub fn fixture() -> Result<()> {
@@ -114,7 +114,7 @@ pub fn fixture() -> Result<()> {
             original.owned_change = Some(original.board.changeCount());
             fixture_contents = Some(snapshot());
         }
-        // Reading is allowed only after RSpec has supplied harmless fixture data.
+        // Reading is allowed only after Lean tests has supplied harmless fixture data.
         if fixture_contents.is_none() {
             return Err(Error::usage("Write fixture data before inspecting it"));
         }

@@ -3,12 +3,11 @@
 .logs/
 .swiftpm/
 windows/target/
-.bundle/
-vendor/bundle/
 
 macos/target/
 Cargo.lock
 !linux/Cargo.lock
 linux/target/
-Gemfile.lock
 THIRD_PARTY_NOTICES.md
+
+spec/.lake/

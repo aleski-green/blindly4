@@ -320,7 +320,7 @@ pub fn run() -> Result<()> {
                 break;
             }
             // Native fixture behaviors, reached only after real Ctrl+V input.
-            // Hold mode lets RSpec coordinate another process without timing guesses.
+            // Hold mode lets Lean tests coordinate another process without timing guesses.
             if !paste_mode.is_empty()
                 && message.hwnd == draft
                 && message.message == WM_KEYDOWN

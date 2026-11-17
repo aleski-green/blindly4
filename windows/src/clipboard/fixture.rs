@@ -1,4 +1,4 @@
-// Opt-in native transport only; RSpec owns the behavioral assertions.
+// Opt-in native transport only; Lean tests owns the behavioral assertions.
 use super::*;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, io::BufRead, sync::mpsc};
@@ -43,7 +43,7 @@ fn snapshot(owner: HWND, supplied: &BTreeMap<String, u32>) -> Result<(Value, u32
 }
 
 pub fn run() -> Result<()> {
-    // Save user data privately. Only RSpec-supplied format bytes go to stdout.
+    // Save user data privately. Only Lean tests-supplied format bytes go to stdout.
     let mut original = Clipboard::capture()?;
     let mut supplied = BTreeMap::new();
     let mut fixture_contents = None;
@@ -61,7 +61,7 @@ pub fn run() -> Result<()> {
     let outcome = (|| -> Result<()> {
         loop {
             // Clipboard ownership notifications must be serviced while waiting
-            // for RSpec, including when another process performs the paste.
+            // for Lean tests, including when another process performs the paste.
             unsafe {
                 let mut message = MSG::default();
                 while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
